@@ -1,0 +1,74 @@
+<Window x:Class="RobloxAccountManager.Views.UpdaterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Updating Roblox Account Manager"
+        Width="440" Height="240"
+        WindowStyle="None" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource CanvasBrush}"
+        TextElement.Foreground="{DynamicResource TextPrimaryBrush}"
+        FontFamily="{StaticResource UiFont}"
+        TextOptions.TextFormattingMode="Ideal"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Border Background="{DynamicResource WindowBackdropBrush}"
+            BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1">
+        <Grid Margin="28,24,28,22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <Ellipse Width="7" Height="7" Fill="{DynamicResource InfoBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="Updating Roblox Account Manager" Margin="9,0,0,0" VerticalAlignment="Center"
+                           FontFamily="{StaticResource DisplayFont}" FontSize="14" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimaryBrush}" />
+            </StackPanel>
+
+            <!-- Status -->
+            <TextBlock x:Name="StatusText" Grid.Row="1" Margin="0,10,0,0" Text="Preparing…"
+                       FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextSecondaryBrush}" />
+
+            <!-- Progress -->
+            <Grid Grid.Row="3" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ProgressBar x:Name="Progress" Height="6" Minimum="0" Maximum="100" VerticalAlignment="Center">
+                    <ProgressBar.Template>
+                        <ControlTemplate TargetType="ProgressBar">
+                            <Grid>
+                                <Border x:Name="PART_Track" CornerRadius="3"
+                                        Background="{DynamicResource SurfaceAltBrush}"
+                                        BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="1" />
+                                <Border x:Name="PART_Indicator" CornerRadius="3" HorizontalAlignment="Left"
+                                        Background="{DynamicResource AccentBrush}" />
+                            </Grid>
+                        </ControlTemplate>
+                    </ProgressBar.Template>
+                </ProgressBar>
+                <TextBlock x:Name="PercentText" Grid.Column="1" Margin="12,0,0,0" MinWidth="38"
+                           FontSize="11" TextAlignment="Right" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextMutedBrush}" />
+            </Grid>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="RetryButton" Style="{StaticResource GhostButton}" Content="Retry"
+                        Visibility="Collapsed" Margin="0,0,10,0" Click="Retry_Click" />
+                <Button x:Name="StartAnywayButton" Style="{StaticResource GhostButton}" Content="Start app anyway"
+                        Visibility="Collapsed" Margin="0,0,10,0" Click="StartAnyway_Click" />
+                <Button x:Name="CancelButton" Style="{StaticResource GhostButton}" Content="Cancel"
+                        Click="Cancel_Click" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

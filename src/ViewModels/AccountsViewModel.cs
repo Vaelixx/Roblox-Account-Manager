@@ -139,6 +139,12 @@ public class AccountsViewModel : ObservableObject
         });
     }
 
+    // ---- saved places ----
+    public System.Collections.ObjectModel.ObservableCollection<SavedPlace> SavedPlaces { get; } = new();
+
+    private bool _savedPlacesOpen;
+    public bool SavedPlacesOpen { get => _savedPlacesOpen; set => SetField(ref _savedPlacesOpen, value); }
+
     private string _jobIdText = "";
     public string JobIdText { get => _jobIdText; set => SetField(ref _jobIdText, value); }
 
@@ -164,12 +170,16 @@ public class AccountsViewModel : ObservableObject
     public AsyncRelayCommand OpenBrowserCommand { get; }
     public RelayCommand OpenProfileCommand { get; }
     public AsyncRelayCommand OpenAppCommand { get; }
+    public RelayCommand SavePlaceCommand { get; }
+    public RelayCommand RemovePlaceCommand { get; }
+    public RelayCommand ApplySavedPlaceCommand { get; }
 
     public AccountsViewModel(AccountStore store, MainViewModel main)
     {
         _store = store;
         _main = main;
         PlaceIdText = SettingsService.Current.DefaultPlaceId > 0 ? SettingsService.Current.DefaultPlaceId.ToString() : "";
+        foreach (var p in SettingsService.Current.SavedPlaces) SavedPlaces.Add(p);
 
         AddCommand = new AsyncRelayCommand(AddAsync);
         ImportCommand = new AsyncRelayCommand(ImportAsync);
@@ -186,6 +196,9 @@ public class AccountsViewModel : ObservableObject
         OpenBrowserCommand = new AsyncRelayCommand(OpenBrowserAsync);
         OpenProfileCommand = new RelayCommand(_ => { if (_selected != null) BrowserService.OpenProfile(_selected); });
         OpenAppCommand = new AsyncRelayCommand(OpenAppAsync);
+        SavePlaceCommand = new RelayCommand(_ => SavePlace());
+        RemovePlaceCommand = new RelayCommand(p => RemovePlace(p as SavedPlace));
+        ApplySavedPlaceCommand = new RelayCommand(p => ApplySavedPlace(p as SavedPlace));
     }
 
     private async Task OpenBrowserAsync()
@@ -415,5 +428,49 @@ public class AccountsViewModel : ObservableObject
     {
         if (!TryPlaceId(out long placeId)) return;
         _main.OpenServersFor(placeId);
+    }
+
+    // ---- saved places ----
+    private void SavePlace()
+    {
+        var digits = new string(PlaceIdText.Where(char.IsDigit).ToArray());
+        if (!long.TryParse(digits, out long placeId) || placeId <= 0)
+        {
+            _main.SetStatus("Enter a valid Place ID before saving it.");
+            return;
+        }
+
+        string? name = DialogService.Prompt("Save place", "Name for this place", GameName);
+        if (string.IsNullOrWhiteSpace(name)) return;
+        name = name.Trim();
+
+        var existing = SavedPlaces.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existing != null) SavedPlaces.Remove(existing);
+        SavedPlaces.Add(new SavedPlace { Name = name, PlaceId = placeId });
+
+        PersistSavedPlaces();
+        _main.SetStatus($"Saved '{name}' ({placeId}).");
+    }
+
+    private void RemovePlace(SavedPlace? place)
+    {
+        if (place == null) return;
+        SavedPlaces.Remove(place);
+        PersistSavedPlaces();
+        _main.SetStatus($"Removed saved place '{place.Name}'.");
+    }
+
+    private void ApplySavedPlace(SavedPlace? place)
+    {
+        if (place == null) return;
+        SavedPlacesOpen = false;
+        PlaceIdText = place.PlaceId.ToString();   // setter kicks off the debounced game lookup
+        _main.SetStatus($"Place set to '{place.Name}'.");
+    }
+
+    private void PersistSavedPlaces()
+    {
+        SettingsService.Current.SavedPlaces = SavedPlaces.ToList();
+        SettingsService.Save();
     }
 }

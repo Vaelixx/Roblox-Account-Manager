@@ -143,6 +143,36 @@
                                 Background="{DynamicResource SurfaceAltBrush}">
                             <TextBlock Text="v1.0" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" />
                         </Border>
+                        <!-- Self-update pill: only shown when a newer GitHub release was found -->
+                        <Button Margin="12,0,0,0" VerticalAlignment="Center" Cursor="Hand"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                Command="{Binding UpdateNowCommand}"
+                                ToolTip="Download and install the update"
+                                Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVis}}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bd" CornerRadius="999" Padding="9,3"
+                                            Background="{DynamicResource SurfaceAltBrush}"
+                                            BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path x:Name="ic" Data="{StaticResource Icon.Import}"
+                                                  Style="{StaticResource IconPath}" Width="11" Height="11"
+                                                  Stroke="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="tx" Text="{Binding UpdateVersionText}" Margin="6,0,0,0"
+                                                       FontSize="10" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource ElevatedBrush}" />
+                                            <Setter TargetName="tx" Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                                            <Setter TargetName="ic" Property="Stroke" Value="{DynamicResource TextPrimaryBrush}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                                 WindowChrome.IsHitTestVisibleInChrome="True">

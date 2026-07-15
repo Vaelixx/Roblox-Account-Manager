@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using RobloxAccountManager.Mvvm;
 using RobloxAccountManager.Services;
 
@@ -50,6 +51,21 @@ public class MainViewModel : ObservableObject
 
     public RelayCommand NavCommand { get; }
 
+    // ---- self-update ----
+    private static bool s_updateCheckStarted; // at most one check per process run
+
+    private UpdateInfo? _update;
+    public bool UpdateAvailable => _update != null;
+
+    private string _updateVersionText = "";
+    public string UpdateVersionText
+    {
+        get => _updateVersionText;
+        private set => SetField(ref _updateVersionText, value);
+    }
+
+    public RelayCommand UpdateNowCommand { get; }
+
     public MainViewModel()
     {
         NavCommand = new RelayCommand(p =>
@@ -64,9 +80,47 @@ public class MainViewModel : ObservableObject
         Settings = new SettingsViewModel(this);
 
         NavItems[0].IsActive = true;
+
+        UpdateNowCommand = new RelayCommand(UpdateNow, () => UpdateAvailable);
+
+        // Fire-and-forget update check on startup, at most once per run; failures are silent.
+        if (!s_updateCheckStarted)
+        {
+            s_updateCheckStarted = true;
+            _ = CheckForUpdateAsync();
+        }
     }
 
     public void SetStatus(string s) => Status = s;
+
+    private async Task CheckForUpdateAsync()
+    {
+        var info = await UpdateService.CheckForUpdateAsync().ConfigureAwait(false);
+        if (info == null) return;
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+        await dispatcher.InvokeAsync(() =>
+        {
+            _update = info;
+            UpdateVersionText = $"Update available — {info.VersionText}";
+            OnPropertyChanged(nameof(UpdateAvailable));
+        });
+    }
+
+    private void UpdateNow()
+    {
+        if (_update is not { } info) return;
+
+        if (!DialogService.Confirm("Install update",
+                $"{info.VersionText} is available. The app will close, install the update and restart.\n\nUpdate now?"))
+            return;
+
+        if (UpdateService.BeginUpdate(info))
+            Application.Current.Shutdown();
+        else
+            SetStatus("Update could not be started — please try again later.");
+    }
 
     public void OpenServersFor(long placeId)
     {

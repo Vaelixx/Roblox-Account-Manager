@@ -10,6 +10,57 @@
                 <data:PropertyGroupDescription PropertyName="Group" />
             </CollectionViewSource.GroupDescriptions>
         </CollectionViewSource>
+
+        <!-- Icon-sized toggle for the saved-places dropdown (mirrors IconButton). -->
+        <Style x:Key="IconToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd" CornerRadius="{StaticResource RadiusSm}"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ElevatedHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Left-aligned menu row for the saved-places popup. -->
+        <Style x:Key="MenuRowButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" CornerRadius="{StaticResource RadiusSm}"
+                                Background="{TemplateBinding Background}" Padding="8,6">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ElevatedHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="30,8,30,26">
@@ -359,12 +410,79 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBox Text="{Binding PlaceIdText, UpdateSourceTrigger=PropertyChanged}" />
                                     <Button Grid.Column="1" Style="{StaticResource IconButton}" Margin="6,0,0,0" Width="38" Height="38"
+                                            Command="{Binding SavePlaceCommand}" ToolTip="Save this Place ID under a name">
+                                        <Path Data="{StaticResource Icon.Bookmark}" Style="{StaticResource IconPath}" />
+                                    </Button>
+                                    <ToggleButton x:Name="SavedPlacesToggle" Grid.Column="2" Style="{StaticResource IconToggle}"
+                                                  Margin="6,0,0,0" Width="38" Height="38"
+                                                  IsChecked="{Binding SavedPlacesOpen, Mode=TwoWay}" ToolTip="Saved places">
+                                        <Path Data="{StaticResource Icon.ChevronDown}" Style="{StaticResource IconPath}" Width="12" Height="12" />
+                                    </ToggleButton>
+                                    <Button Grid.Column="3" Style="{StaticResource IconButton}" Margin="6,0,0,0" Width="38" Height="38"
                                             Command="{Binding BrowseServersCommand}" ToolTip="Browse servers">
                                         <Path Data="{StaticResource Icon.Servers}" Style="{StaticResource IconPath}" />
                                     </Button>
+
+                                    <Popup PlacementTarget="{Binding ElementName=SavedPlacesToggle}" Placement="Bottom"
+                                           IsOpen="{Binding SavedPlacesOpen, Mode=TwoWay}" StaysOpen="False"
+                                           AllowsTransparency="True" VerticalOffset="6" HorizontalOffset="-180">
+                                        <Border Width="218" Background="{DynamicResource ElevatedBrush}"
+                                                BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1"
+                                                CornerRadius="{StaticResource RadiusMd}" Padding="4"
+                                                TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
+                                            <StackPanel>
+                                                <TextBlock Margin="8,7" FontSize="11.5" TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                           Text="No saved places yet — press the bookmark button to save the current Place ID.">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SavedPlaces.Count}" Value="0">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                                                    <ItemsControl x:Name="SavedPlacesList" ItemsSource="{Binding SavedPlaces}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate DataType="{x:Type models:SavedPlace}">
+                                                                <Grid Margin="0,1">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Button Style="{StaticResource MenuRowButton}"
+                                                                            Command="{Binding DataContext.ApplySavedPlaceCommand, ElementName=SavedPlacesList}"
+                                                                            CommandParameter="{Binding}">
+                                                                        <StackPanel>
+                                                                            <TextBlock Text="{Binding Name}" FontSize="12.5" TextTrimming="CharacterEllipsis"
+                                                                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                                                                            <TextBlock Text="{Binding PlaceId}" FontSize="10.5" Margin="0,1,0,0"
+                                                                                       Foreground="{DynamicResource TextMutedBrush}" />
+                                                                        </StackPanel>
+                                                                    </Button>
+                                                                    <Button Grid.Column="1" Style="{StaticResource IconButton}" Width="24" Height="24"
+                                                                            Margin="4,0,2,0" VerticalAlignment="Center"
+                                                                            Command="{Binding DataContext.RemovePlaceCommand, ElementName=SavedPlacesList}"
+                                                                            CommandParameter="{Binding}" ToolTip="Remove saved place">
+                                                                        <Path Data="{StaticResource Icon.Close}" Style="{StaticResource IconPath}" Width="9" Height="9" />
+                                                                    </Button>
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </ScrollViewer>
+                                            </StackPanel>
+                                        </Border>
+                                    </Popup>
                                 </Grid>
 
                                 <TextBlock Text="Job ID (optional — Launch joins it automatically)" Style="{StaticResource Label}" Margin="0,0,0,5" />

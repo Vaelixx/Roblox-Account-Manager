@@ -29,6 +29,7 @@ public class AppSettings
     // ---- Data ----
     public long DefaultPlaceId { get; set; } = 0;
     public bool SkipChromiumPrompt { get; set; } = false;
+    public List<SavedPlace> SavedPlaces { get; set; } = new();
 
     // ---- housekeeping ----
     public double WindowWidth { get; set; } = 1120;
