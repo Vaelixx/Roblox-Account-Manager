@@ -7,6 +7,13 @@ Add accounts once, launch any of them into any game with a click, run many at th
 
 Windows · WPF · .NET 8 · single self‑contained `.exe`
 
+<p align="center">
+  <a href="https://github.com/Vaelixx/Roblox-Account-Manager/releases/latest"><img src="https://img.shields.io/github/v/release/Vaelixx/Roblox-Account-Manager?style=for-the-badge&label=release&color=6d5cff" alt="Latest release"></a>
+  <a href="https://github.com/Vaelixx/Roblox-Account-Manager/releases"><img src="https://img.shields.io/github/downloads/Vaelixx/Roblox-Account-Manager/total?style=for-the-badge&label=downloads&color=22c55e" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/.NET-8.0-512bd4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 8">
+  <img src="https://img.shields.io/badge/platform-Windows-0078d4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows">
+</p>
+
 </div>
 
 ![Accounts](docs/accounts.png)
@@ -50,15 +57,23 @@ Windows · WPF · .NET 8 · single self‑contained `.exe`
 Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
 ```powershell
-git clone https://github.com/<your-name>/RobloxAccountManager.git
-cd RobloxAccountManager
+git clone https://github.com/Vaelixx/Roblox-Account-Manager.git
+cd Roblox-Account-Manager
 
 # quick dev build + run
 dotnet run --project src\RobloxAccountManager.csproj
 
 # produce the single-file, self-contained release exe  ->  .\dist\
-.\publish.ps1
+dotnet publish src\RobloxAccountManager.csproj `
+    -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true `
+    -p:DebugType=none -p:SatelliteResourceLanguages=en `
+    -o dist
 ```
+
+The build produces a single portable `dist\Roblox Account Manager.exe` — copy it anywhere and double‑click to run.
 
 ---
 
