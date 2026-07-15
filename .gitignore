@@ -29,3 +29,10 @@ desktop.ini
 publish.ps1
 release.bat
 release.ps1
+
+# ---------------------------------------------------------------------------
+#  Icon-Quelle — die lose 256x256 icon.png wird beim Build in src/AppIcon.cs
+#  (base64) und src/Assets/app.ico eingebacken; die rohe PNG gehoert nicht ins
+#  Repo. app.ico wird bewusst getrackt (ApplicationIcon im csproj).
+# ---------------------------------------------------------------------------
+icon.png

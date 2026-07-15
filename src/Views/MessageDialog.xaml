@@ -1,6 +1,8 @@
 <Window x:Class="RobloxAccountManager.Views.MessageDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ram="clr-namespace:RobloxAccountManager"
+        Icon="{x:Static ram:AppIcon.Image}"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         SizeToContent="Height" Width="460" ShowInTaskbar="False">
