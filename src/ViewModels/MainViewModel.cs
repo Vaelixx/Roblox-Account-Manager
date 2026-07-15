@@ -49,6 +49,9 @@ public class MainViewModel : ObservableObject
     private string _status = "Ready";
     public string Status { get => _status; set => SetField(ref _status, value); }
 
+    /// <summary>Version badge in the title bar, e.g. "v1.1.0" — read from the built assembly.</summary>
+    public string AppVersionShort => AppInfo.Short;
+
     public RelayCommand NavCommand { get; }
 
     // ---- self-update ----

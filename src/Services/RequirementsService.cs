@@ -38,7 +38,7 @@ public static class RequirementsService
         if (!ChromiumService.IsInstalled && !SettingsService.Current.SkipChromiumPrompt)
         {
             if (DialogService.Confirm("Set up browser support",
-                "\"Open in browser\" uses a private, portable Chromium (downloaded once, ~330 MB, kept separate from Edge/Chrome and your normal browsing). Download it now? You can also do this later from any account."))
+                "\"Open in browser\" uses CloakBrowser — a private, portable stealth Chromium (downloaded once, ~540 MB, kept separate from Edge/Chrome and your normal browsing). Download it now? You can also do this later from any account."))
             {
                 DialogService.ShowChromiumDownload();
             }

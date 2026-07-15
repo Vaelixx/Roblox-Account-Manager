@@ -15,6 +15,16 @@ if (-not (Test-Path $dotnet)) { $dotnet = "dotnet" }
 $proj = Join-Path $PSScriptRoot "src\RobloxAccountManager.csproj"
 $out  = Join-Path $PSScriptRoot "dist"
 
+# A running instance locks "Roblox Account Manager.exe" and makes the build fail with
+# "Access to the path ... denied". Stop any instance that runs from our dist\ folder first.
+$running = Get-Process -Name "Roblox Account Manager" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($out, [System.StringComparison]::OrdinalIgnoreCase) }
+if ($running) {
+    Write-Host "Stopping running instance (locks the exe)..." -ForegroundColor Yellow
+    $running | Stop-Process -Force
+    Start-Sleep -Milliseconds 500
+}
+
 # Clean previous build output but NEVER touch the user's "data" folder (accounts/settings live there).
 if (Test-Path $out) {
     Get-ChildItem $out -Force | Where-Object { $_.Name -ne "data" } | Remove-Item -Recurse -Force

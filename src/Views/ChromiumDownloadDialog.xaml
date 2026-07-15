@@ -23,12 +23,12 @@
                     <Path Data="{StaticResource Icon.Import}" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.8"
                           Width="17" Height="17" Stretch="Uniform" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Border>
-                <TextBlock Text="Download Chromium" Style="{StaticResource DisplayText}" FontSize="16"
+                <TextBlock Text="Download CloakBrowser" Style="{StaticResource DisplayText}" FontSize="16"
                            Margin="12,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
 
             <TextBlock Grid.Row="1" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,10,0,16"
-                       Text="A private, portable Chromium is downloaded once (~330 MB) into the app's data folder. It's used only to open your accounts — separate from Edge/Chrome and your normal browsing." />
+                       Text="CloakBrowser (a private, portable stealth Chromium) is downloaded once (~540 MB) into the app's data folder. It's used only to open your accounts — separate from Edge/Chrome and your normal browsing." />
 
             <!-- progress -->
             <Grid Grid.Row="2">

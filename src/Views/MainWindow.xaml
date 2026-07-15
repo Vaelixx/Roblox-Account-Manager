@@ -141,7 +141,7 @@
                                    FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
                         <Border CornerRadius="6" Padding="7,2" Margin="12,0,0,0" VerticalAlignment="Center"
                                 Background="{DynamicResource SurfaceAltBrush}">
-                            <TextBlock Text="v1.0" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" />
+                            <TextBlock Text="{Binding AppVersionShort}" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" />
                         </Border>
                         <!-- Self-update pill: only shown when a newer GitHub release was found -->
                         <Button Margin="12,0,0,0" VerticalAlignment="Center" Cursor="Hand"

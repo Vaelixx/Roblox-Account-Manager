@@ -54,7 +54,7 @@ git clone https://github.com/<your-name>/RobloxAccountManager.git
 cd RobloxAccountManager
 
 # quick dev build + run
-.\build.ps1
+dotnet run --project src\RobloxAccountManager.csproj
 
 # produce the single-file, self-contained release exe  ->  .\dist\
 .\publish.ps1

@@ -12,9 +12,9 @@ using RobloxAccountManager.Models;
 namespace RobloxAccountManager.Services;
 
 /// <summary>
-/// Opens an account in a real browser, logged in. A Chromium-based browser (Edge, Chrome or Brave)
-/// is launched with a per-account profile and remote-debugging enabled; the .ROBLOSECURITY cookie is
-/// injected over the DevTools protocol, then the tab is navigated to roblox.com — landing signed in.
+/// Opens an account in a real browser, logged in. The private CloakBrowser build is launched with a
+/// per-account profile and remote-debugging enabled; the .ROBLOSECURITY cookie is injected over the
+/// DevTools protocol, then the tab is navigated to roblox.com — landing signed in.
 /// </summary>
 public static class BrowserService
 {
@@ -31,7 +31,7 @@ public static class BrowserService
 
     public record OpenResult(bool Success, string Message);
 
-    /// <summary>Launches the private Chromium build signed in as this account.</summary>
+    /// <summary>Launches the private CloakBrowser build signed in as this account.</summary>
     public static async Task<OpenResult> OpenLoggedInAsync(Account acc)
     {
         if (string.IsNullOrEmpty(acc.Cookie))
@@ -56,14 +56,14 @@ public static class BrowserService
 
             string? wsUrl = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(15));
             if (wsUrl == null)
-                return new(false, "Chromium started but the debugger didn't respond in time.");
+                return new(false, "CloakBrowser started but the debugger didn't respond in time.");
 
             await InjectCookieAndNavigateAsync(wsUrl, acc.Cookie);
-            return new(true, $"Opened {acc.DisplayNameOrUser} in Chromium.");
+            return new(true, $"Opened {acc.DisplayNameOrUser} in CloakBrowser.");
         }
         catch (Exception ex)
         {
-            return new(false, $"Couldn't open Chromium: {ex.Message}");
+            return new(false, $"Couldn't open CloakBrowser: {ex.Message}");
         }
     }
 

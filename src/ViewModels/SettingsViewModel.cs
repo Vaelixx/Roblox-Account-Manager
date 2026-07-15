@@ -21,15 +21,15 @@ public class SettingsViewModel : ObservableObject
     // Browser
     public bool ChromiumInstalled => ChromiumService.IsInstalled;
     public string ChromiumStatus => ChromiumService.IsInstalled
-        ? "Private Chromium is installed — accounts open in it, separate from your normal browser."
-        : "Not installed yet. \"Open in browser\" will download a portable Chromium (~330 MB) on first use.";
-    public string ChromiumButtonText => ChromiumService.IsInstalled ? "Re-download Chromium" : "Download Chromium";
+        ? "CloakBrowser is installed — accounts open in it, separate from your normal browser."
+        : "Not installed yet. \"Open in browser\" will download a portable CloakBrowser (~540 MB) on first use.";
+    public string ChromiumButtonText => ChromiumService.IsInstalled ? "Re-download CloakBrowser" : "Download CloakBrowser";
     public RelayCommand DownloadChromiumCommand { get; }
 
     private void DownloadChromium()
     {
         if (DialogService.ShowChromiumDownload())
-            _main.SetStatus("Chromium ready.");
+            _main.SetStatus("CloakBrowser ready.");
         RefreshChromium();
     }
 
@@ -75,7 +75,7 @@ public class SettingsViewModel : ObservableObject
     public RelayCommand RemovePasswordCommand { get; }
     public RelayCommand OpenDataFolderCommand { get; }
 
-    public string AppVersion => "Version 1.0.0";
+    public string AppVersion => AppInfo.Long;
 
     private void Persist() { SettingsService.Save(); OnPropertyChanged(""); }
 

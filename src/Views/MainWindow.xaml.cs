@@ -33,6 +33,14 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object? sender, RoutedEventArgs e)
     {
+        // Loaded fires before the window has painted its first frame. Anything here
+        // that opens a modal dialog (e.g. the Chromium prompt in CheckOnStartup)
+        // would block inside a nested message loop while the main window is still
+        // invisible — making the app look like it never started. Yield until the
+        // dispatcher is idle so the window is actually on screen first.
+        await Dispatcher.InvokeAsync(() => { },
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+
         LauncherService.EnsureMultiInstance(SettingsService.Current.EnableMultiInstance);
 
         RequirementsService.CheckOnStartup();

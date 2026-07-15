@@ -9,12 +9,30 @@ public static class DialogService
 {
     private static Window? Owner => Application.Current?.MainWindow;
 
+    /// <summary>
+    /// Parents the dialog to the main window only if that window is actually
+    /// visible on screen. Otherwise the dialog centers itself and gets its own
+    /// taskbar entry — an owned dialog of an invisible window has no taskbar
+    /// presence and can sit unnoticed while it blocks startup.
+    /// </summary>
+    private static void AttachOwner(Window dlg)
+    {
+        if (Owner != null && Owner != dlg && Owner.IsVisible)
+        {
+            dlg.Owner = Owner;
+        }
+        else
+        {
+            dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            dlg.ShowInTaskbar = true;
+        }
+    }
+
     private static MessageDialog Make(MessageDialog.Kind kind, string title, string message,
         string initial = "", string okText = "OK", bool showCancel = true)
     {
         var dlg = new MessageDialog(kind, title, message, initial, okText, showCancel);
-        if (Owner != null && Owner.IsLoaded) dlg.Owner = Owner;
-        else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        AttachOwner(dlg);
         return dlg;
     }
 
@@ -57,8 +75,7 @@ public static class DialogService
     public static bool ShowChromiumDownload()
     {
         var dlg = new ChromiumDownloadDialog();
-        if (Owner != null && Owner.IsLoaded) dlg.Owner = Owner;
-        else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        AttachOwner(dlg);
         dlg.ShowDialog();
         return dlg.Installed;
     }
@@ -66,8 +83,7 @@ public static class DialogService
     public static Account? ShowAddAccount(AccountStore store)
     {
         var dlg = new AddAccountDialog(store);
-        if (Owner != null && Owner.IsLoaded) dlg.Owner = Owner;
-        else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        AttachOwner(dlg);
         return dlg.ShowDialog() == true ? dlg.Added : null;
     }
 
