@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Web;
 using RobloxAccountManager.Models;
 
 namespace RobloxAccountManager.Services;
@@ -259,6 +261,74 @@ public static class RobloxApi
             var data = doc.RootElement.GetProperty("data");
             if (data.GetArrayLength() == 0) return null;
             return data[0].TryGetProperty("imageUrl", out var iu) ? iu.GetString() : null;
+        }
+        catch { return null; }
+    }
+
+    // ---------------------------------------------------------------
+    //  Private-server / join-link parsing
+    // ---------------------------------------------------------------
+    public record ParsedJoinLink(long PlaceId, string? LinkCode, string? ShareCode);
+
+    /// <summary>
+    /// Pulls what we can straight out of a pasted Roblox link WITHOUT a network call:
+    ///   - classic private link:  .../games/{placeId}/name?privateServerLinkCode={code}
+    ///   - plain game link:        .../games/{placeId}/...
+    ///   - share link:             .../share?code={code}&amp;type=Server  (resolve via ResolveShareLinkAsync)
+    /// </summary>
+    public static ParsedJoinLink ParseJoinLink(string input)
+    {
+        long placeId = 0; string? linkCode = null; string? shareCode = null;
+        try
+        {
+            var uri = new Uri(input.Trim());
+            var q = HttpUtility.ParseQueryString(uri.Query);
+
+            var m = Regex.Match(uri.AbsolutePath, @"/games/(\d+)", RegexOptions.IgnoreCase);
+            if (m.Success) long.TryParse(m.Groups[1].Value, out placeId);
+
+            linkCode = q["privateServerLinkCode"];
+
+            string? code = q["code"];
+            string? type = q["type"];
+            bool isShare = uri.AbsolutePath.Contains("share", StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(type, "Server", StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(code) && isShare) shareCode = code;
+        }
+        catch { }
+        return new ParsedJoinLink(placeId,
+            string.IsNullOrWhiteSpace(linkCode) ? null : linkCode,
+            string.IsNullOrWhiteSpace(shareCode) ? null : shareCode);
+    }
+
+    public record ShareLinkInfo(long PlaceId, string LinkCode);
+
+    /// <summary>Resolves a modern share link (roblox.com/share?code=...&amp;type=Server) to a place + link code.</summary>
+    public static async Task<ShareLinkInfo?> ResolveShareLinkAsync(string cookie, string shareCode)
+    {
+        try
+        {
+            string? csrf = await GetCsrfTokenAsync(cookie);
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                var req = Build(HttpMethod.Post, "https://apis.roblox.com/sharelinks/v1/resolve-link",
+                    cookie, csrf, content: Json(new { linkId = shareCode, linkType = "Server" }),
+                    referer: "https://www.roblox.com/");
+                var resp = await Http.SendAsync(req);
+
+                if (resp.StatusCode == HttpStatusCode.Forbidden &&
+                    resp.Headers.TryGetValues("x-csrf-token", out var nt))
+                { csrf = nt.FirstOrDefault(); continue; }
+
+                if (!resp.IsSuccessStatusCode) return null;
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                if (!doc.RootElement.TryGetProperty("privateServerInviteData", out var d)) return null;
+                long placeId = d.TryGetProperty("placeId", out var pid) ? pid.GetInt64() : 0;
+                string? linkCode = d.TryGetProperty("linkCode", out var lc) ? lc.GetString() : null;
+                if (placeId <= 0 || string.IsNullOrEmpty(linkCode)) return null;
+                return new ShareLinkInfo(placeId, linkCode!);
+            }
+            return null;
         }
         catch { return null; }
     }

@@ -59,6 +59,10 @@ public class Account : ObservableObject
     private bool _isBusy;
     [JsonIgnore] public bool IsBusy { get => _isBusy; set => SetField(ref _isBusy, value); }
 
+    // Ticked in the account list for multi-select / multi-launch.
+    private bool _isChecked;
+    [JsonIgnore] public bool IsChecked { get => _isChecked; set => SetField(ref _isChecked, value); }
+
     [JsonIgnore] public string DisplayNameOrUser => string.IsNullOrEmpty(Alias) ? (string.IsNullOrEmpty(Username) ? "Unknown" : Username) : Alias;
     [JsonIgnore] public string Initials
     {

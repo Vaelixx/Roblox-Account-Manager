@@ -98,6 +98,9 @@ public class AccountsViewModel : ObservableObject
     private string? _gameIcon;
     public string? GameIcon { get => _gameIcon; set => SetField(ref _gameIcon, value); }
 
+    // UniverseId from the most recent place lookup — cached onto a SavedPlace when it's saved.
+    private long _lastUniverseId;
+
     public bool HasGameInfo => !string.IsNullOrEmpty(_gameName);
 
     private CancellationTokenSource? _placeLookupCts;
@@ -130,6 +133,7 @@ public class AccountsViewModel : ObservableObject
 
                 App.Current.Dispatcher.Invoke(() =>
                 {
+                    _lastUniverseId = info.UniverseId;
                     GameName = info.Name;
                     GameCreator = string.IsNullOrEmpty(info.Creator) ? "" : $"by {info.Creator}";
                     GameIcon = icon;
@@ -143,7 +147,11 @@ public class AccountsViewModel : ObservableObject
     public System.Collections.ObjectModel.ObservableCollection<SavedPlace> SavedPlaces { get; } = new();
 
     private bool _savedPlacesOpen;
-    public bool SavedPlacesOpen { get => _savedPlacesOpen; set => SetField(ref _savedPlacesOpen, value); }
+    public bool SavedPlacesOpen
+    {
+        get => _savedPlacesOpen;
+        set { if (SetField(ref _savedPlacesOpen, value) && value) _ = LoadSavedPlaceIconsAsync(); }
+    }
 
     private string _jobIdText = "";
     public string JobIdText { get => _jobIdText; set => SetField(ref _jobIdText, value); }
@@ -199,6 +207,8 @@ public class AccountsViewModel : ObservableObject
         SavePlaceCommand = new RelayCommand(_ => SavePlace());
         RemovePlaceCommand = new RelayCommand(p => RemovePlace(p as SavedPlace));
         ApplySavedPlaceCommand = new RelayCommand(p => ApplySavedPlace(p as SavedPlace));
+
+        _ = LoadSavedPlaceIconsAsync();   // warm up saved-place icons in the background
     }
 
     private async Task OpenBrowserAsync()
@@ -239,10 +249,17 @@ public class AccountsViewModel : ObservableObject
         _main.SetStatus(r.Success ? $"Opened Roblox as {_selected.DisplayNameOrUser}." : r.Message);
     }
 
-    private static List<Account> Sel(IList? list)
+    private List<Account> Sel(IList? list)
     {
-        if (list == null) return new();
-        return list.Cast<Account>().ToList();
+        // Checkboxes win: if any accounts are ticked, act on exactly those.
+        var ticked = _store.Accounts.Where(a => a.IsChecked).ToList();
+        if (ticked.Count > 0) return ticked;
+        if (list != null)
+        {
+            var picked = list.Cast<Account>().ToList();
+            if (picked.Count > 0) return picked;
+        }
+        return _selected != null ? new List<Account> { _selected } : new();
     }
 
     private async Task AddAsync()
@@ -295,9 +312,10 @@ public class AccountsViewModel : ObservableObject
         var sel = Sel(list);
         if (sel.Count == 0) { _main.SetStatus("Select at least one account."); return; }
         if (!TryPlaceId(out long placeId)) return;
-        // A single Launch button: if a Job ID is filled in, join that specific server automatically.
-        string? job = string.IsNullOrWhiteSpace(JobIdText) ? null : JobIdText.Trim();
-        await LaunchSequential(sel, placeId, job, 0);
+        // Launch auto-joins whatever is in the Job-ID / link box: a Job ID, a private-server link, or nothing.
+        var t = await ResolveJoinTargetAsync(placeId, sel);
+        if (!t.ok) return;
+        await LaunchSequential(sel, t.placeId, t.jobId, 0, t.linkCode);
     }
 
     private async Task JoinServerAsync(IList? list)
@@ -305,9 +323,46 @@ public class AccountsViewModel : ObservableObject
         var sel = Sel(list);
         if (sel.Count == 0) { _main.SetStatus("Select at least one account."); return; }
         if (!TryPlaceId(out long placeId)) return;
-        string job = JobIdText.Trim();
-        if (string.IsNullOrEmpty(job)) { _main.SetStatus("Enter a Job ID, or use Smart Join."); return; }
-        await LaunchSequential(sel, placeId, job, 0);
+        if (string.IsNullOrWhiteSpace(JobIdText)) { _main.SetStatus("Enter a Job ID or private-server link, or use Smart Join."); return; }
+        var t = await ResolveJoinTargetAsync(placeId, sel);
+        if (!t.ok) return;
+        if (t.jobId == null && t.linkCode == null) { _main.SetStatus("That doesn't look like a Job ID or private-server link."); return; }
+        await LaunchSequential(sel, t.placeId, t.jobId, 0, t.linkCode);
+    }
+
+    // Turns the Job-ID / link box into concrete launch parameters.
+    private async Task<(bool ok, long placeId, string? jobId, string? linkCode)> ResolveJoinTargetAsync(long placeId, List<Account> sel)
+    {
+        string input = (JobIdText ?? "").Trim();
+        if (input.Length == 0) return (true, placeId, null, null);
+
+        bool looksLikeUrl = input.Contains("roblox.com", StringComparison.OrdinalIgnoreCase)
+                            || input.StartsWith("http", StringComparison.OrdinalIgnoreCase);
+        if (looksLikeUrl)
+        {
+            var parsed = RobloxApi.ParseJoinLink(input);
+            long pid = parsed.PlaceId > 0 ? parsed.PlaceId : placeId;
+
+            if (!string.IsNullOrEmpty(parsed.LinkCode))
+                return (true, pid, null, parsed.LinkCode);
+
+            if (!string.IsNullOrEmpty(parsed.ShareCode))
+            {
+                _main.SetStatus("Resolving private-server link…");
+                string cookie = sel.FirstOrDefault(a => a.IsValid)?.Cookie
+                                ?? _store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie ?? "";
+                var res = await RobloxApi.ResolveShareLinkAsync(cookie, parsed.ShareCode);
+                if (res == null) { _main.SetStatus("Couldn't resolve that private-server link — is it still valid?"); return (false, 0, null, null); }
+                return (true, res.PlaceId, null, res.LinkCode);
+            }
+
+            if (pid > 0) return (true, pid, null, null);   // plain game link -> normal join
+            _main.SetStatus("Couldn't read a Place ID from that link — set one above.");
+            return (false, 0, null, null);
+        }
+
+        // Not a URL: treat as a Job ID (GUID). LauncherService sanitises it further.
+        return (true, placeId, input, null);
     }
 
     private async Task ShuffleJoinAsync(IList? list)
@@ -334,7 +389,7 @@ public class AccountsViewModel : ObservableObject
         await LaunchSequential(sel, 0, null, id);
     }
 
-    private async Task LaunchSequential(List<Account> accounts, long placeId, string? job, long followId)
+    private async Task LaunchSequential(List<Account> accounts, long placeId, string? job, long followId, string? linkCode = null)
     {
         if (followId == 0 && placeId > 0 && !RequirementsService.IsRobloxInstalled())
         {
@@ -354,7 +409,7 @@ public class AccountsViewModel : ObservableObject
             var a = accounts[i];
             a.IsBusy = true;
             _main.SetStatus($"Launching {a.DisplayNameOrUser} ({i + 1}/{accounts.Count})…");
-            var r = await LauncherService.LaunchAsync(a, placeId, job, followId);
+            var r = await LauncherService.LaunchAsync(a, placeId, job, followId, linkCode);
             a.IsBusy = false;
             if (r.Success) ok++;
             else firstError ??= $"{a.DisplayNameOrUser}: {r.Message}";
@@ -446,9 +501,16 @@ public class AccountsViewModel : ObservableObject
 
         var existing = SavedPlaces.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existing != null) SavedPlaces.Remove(existing);
-        SavedPlaces.Add(new SavedPlace { Name = name, PlaceId = placeId });
+        SavedPlaces.Add(new SavedPlace
+        {
+            Name = name,
+            PlaceId = placeId,
+            IconUrl = GameIcon,
+            UniverseId = _lastUniverseId
+        });
 
         PersistSavedPlaces();
+        _ = LoadSavedPlaceIconsAsync();   // fill the icon if the live lookup hadn't finished yet
         _main.SetStatus($"Saved '{name}' ({placeId}).");
     }
 
@@ -466,6 +528,40 @@ public class AccountsViewModel : ObservableObject
         SavedPlacesOpen = false;
         PlaceIdText = place.PlaceId.ToString();   // setter kicks off the debounced game lookup
         _main.SetStatus($"Place set to '{place.Name}'.");
+    }
+
+    private bool _loadingIcons;
+    private async Task LoadSavedPlaceIconsAsync()
+    {
+        if (_loadingIcons) return;
+        var missing = SavedPlaces.Where(p => string.IsNullOrEmpty(p.IconUrl) && p.PlaceId > 0).ToList();
+        if (missing.Count == 0) return;
+        _loadingIcons = true;
+        try
+        {
+            string cookie = _store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie ?? "";
+            bool changed = false;
+            foreach (var place in missing)
+            {
+                try
+                {
+                    long universeId = place.UniverseId;
+                    if (universeId <= 0)
+                    {
+                        var info = await RobloxApi.GetPlaceInfoAsync(cookie, place.PlaceId);
+                        if (info == null) continue;
+                        universeId = info.UniverseId;
+                    }
+                    string? icon = await RobloxApi.GetGameIconAsync(universeId);
+                    if (string.IsNullOrEmpty(icon)) continue;
+                    App.Current.Dispatcher.Invoke(() => { place.UniverseId = universeId; place.IconUrl = icon; });
+                    changed = true;
+                }
+                catch { }
+            }
+            if (changed) App.Current.Dispatcher.Invoke(PersistSavedPlaces);
+        }
+        finally { _loadingIcons = false; }
     }
 
     private void PersistSavedPlaces()

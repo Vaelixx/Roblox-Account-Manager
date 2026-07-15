@@ -373,6 +373,39 @@
     </Style>
 
     <!-- ============================================================= -->
+    <!--  Selection checkbox (multi-select list ticks)                  -->
+    <!-- ============================================================= -->
+    <Style x:Key="SelectCheck" TargetType="CheckBox">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Border x:Name="box" Width="20" Height="20" CornerRadius="6"
+                            Background="{DynamicResource SurfaceAltBrush}"
+                            BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1.5">
+                        <Path x:Name="check" Width="11" Height="11" Stretch="Uniform"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Data="M2,6 L5,9.5 L10,2" Opacity="0"
+                              Stroke="White" StrokeThickness="2"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="box" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="check" Property="Opacity" Value="1" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================= -->
     <!--  Toggle switch (CheckBox)                                      -->
     <!-- ============================================================= -->
     <Style x:Key="ToggleSwitch" TargetType="CheckBox">
@@ -535,12 +568,18 @@
                                 BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
                                 IsHitTestVisible="False" Opacity="0" />
                         <Popup x:Name="PART_Popup" AllowsTransparency="True" Placement="Bottom"
-                               IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Fade" Focusable="False">
-                            <Border Margin="0,6,0,0" CornerRadius="{StaticResource RadiusMd}"
+                               IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="None" Focusable="False">
+                            <Border x:Name="popupRoot" Margin="0,6,0,0" CornerRadius="{StaticResource RadiusMd}" Opacity="0" RenderTransformOrigin="0.5,0"
                                     Background="{DynamicResource ElevatedBrush}"
                                     BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
                                     Effect="{StaticResource ShadowSoft}">
+                                <Border.RenderTransform>
+                                    <TransformGroup>
+                                        <ScaleTransform x:Name="popupScale" ScaleY="0.92" />
+                                        <TranslateTransform x:Name="popupSlide" Y="-6" />
+                                    </TransformGroup>
+                                </Border.RenderTransform>
                                 <ScrollViewer MaxHeight="260" Margin="4">
                                     <ItemsPresenter />
                                 </ScrollViewer>
@@ -548,6 +587,37 @@
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsDropDownOpen" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="popupRoot" Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0:0:0.14" />
+                                        <DoubleAnimation Storyboard.TargetName="popupScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="1" Duration="0:0:0.16">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="popupSlide" Storyboard.TargetProperty="Y"
+                                                         To="0" Duration="0:0:0.16">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="popupRoot" Storyboard.TargetProperty="Opacity" To="0" Duration="0" />
+                                        <DoubleAnimation Storyboard.TargetName="popupScale" Storyboard.TargetProperty="ScaleY" To="0.92" Duration="0" />
+                                        <DoubleAnimation Storyboard.TargetName="popupSlide" Storyboard.TargetProperty="Y" To="-6" Duration="0" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Trigger.EnterActions>
                                 <BeginStoryboard>

@@ -124,7 +124,8 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Style="{StaticResource Card}" Background="{DynamicResource SurfaceAltBrush}"
+                <Border Grid.Row="0" Background="Transparent"
+                        BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="0,0,0,1.5"
                         Height="40" Margin="0,0,0,12">
                     <Grid Margin="12,0">
                         <Grid.ColumnDefinitions>
@@ -182,12 +183,18 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
+                                        <!-- Multi-select tick -->
+                                        <CheckBox Grid.Column="0" Style="{StaticResource SelectCheck}"
+                                                  VerticalAlignment="Center" Margin="0,0,10,0"
+                                                  IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
                                         <!-- Avatar -->
-                                        <Grid Grid.Column="0" Width="42" Height="42">
+                                        <Grid Grid.Column="1" Width="42" Height="42">
                                             <Border CornerRadius="11" Background="{DynamicResource SurfaceAltBrush}"
                                                     BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1" />
                                             <TextBlock Text="{Binding Initials}" HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -202,7 +209,7 @@
                                         </Grid>
 
                                         <!-- Name / meta -->
-                                        <StackPanel Grid.Column="1" Margin="13,0" VerticalAlignment="Center">
+                                        <StackPanel Grid.Column="2" Margin="13,0" VerticalAlignment="Center">
                                             <TextBlock FontWeight="SemiBold" FontSize="13.5" TextTrimming="CharacterEllipsis"
                                                        Foreground="{DynamicResource TextPrimaryBrush}">
                                                 <TextBlock.Text>
@@ -229,7 +236,7 @@
                                                        Visibility="{Binding Description, Converter={StaticResource NullToVis}}" />
                                         </StackPanel>
 
-                                        <Border Grid.Column="2" VerticalAlignment="Center" CornerRadius="6" Padding="7,3"
+                                        <Border Grid.Column="3" VerticalAlignment="Center" CornerRadius="6" Padding="7,3"
                                                 Background="{DynamicResource DangerSoftBrush}"
                                                 Visibility="{Binding IsValid, Converter={StaticResource InverseBoolToVis}}">
                                             <TextBlock Text="expired" FontSize="10" Foreground="{DynamicResource DangerBrush}" />
@@ -462,11 +469,20 @@
                                                                     <Button Style="{StaticResource MenuRowButton}"
                                                                             Command="{Binding DataContext.ApplySavedPlaceCommand, ElementName=SavedPlacesList}"
                                                                             CommandParameter="{Binding}">
-                                                                        <StackPanel>
+                                                                        <StackPanel Orientation="Horizontal">
+                                                                            <Border Width="26" Height="26" CornerRadius="6" Margin="0,0,8,0"
+                                                                                    VerticalAlignment="Center" ClipToBounds="True"
+                                                                                    Background="{DynamicResource SurfaceAltBrush}"
+                                                                                    Visibility="{Binding IconUrl, Converter={StaticResource NullToVis}}">
+                                                                                <Image Source="{Binding IconUrl, Converter={StaticResource UrlToImage}}"
+                                                                                       Stretch="UniformToFill" />
+                                                                            </Border>
+                                                                            <StackPanel VerticalAlignment="Center">
                                                                             <TextBlock Text="{Binding Name}" FontSize="12.5" TextTrimming="CharacterEllipsis"
                                                                                        Foreground="{DynamicResource TextPrimaryBrush}" />
                                                                             <TextBlock Text="{Binding PlaceId}" FontSize="10.5" Margin="0,1,0,0"
                                                                                        Foreground="{DynamicResource TextMutedBrush}" />
+                                                                            </StackPanel>
                                                                         </StackPanel>
                                                                     </Button>
                                                                     <Button Grid.Column="1" Style="{StaticResource IconButton}" Width="24" Height="24"
@@ -485,7 +501,7 @@
                                     </Popup>
                                 </Grid>
 
-                                <TextBlock Text="Job ID (optional — Launch joins it automatically)" Style="{StaticResource Label}" Margin="0,0,0,5" />
+                                <TextBlock Text="Job ID or private-server link (optional — Launch joins it automatically)" Style="{StaticResource Label}" Margin="0,0,0,5" />
                                 <TextBox Text="{Binding JobIdText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
 
                                 <Button Style="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch"

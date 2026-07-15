@@ -6,7 +6,7 @@
         xmlns:views="clr-namespace:RobloxAccountManager.Views"
         xmlns:ram="clr-namespace:RobloxAccountManager"
         Title="Roblox Account Manager"
-        Icon="{x:Static ram:AppIcon.Image}"
+        Icon="pack://application:,,,/Assets/app.ico"
         Width="1180" Height="760" MinWidth="960" MinHeight="620"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource CanvasBrush}"
@@ -49,9 +49,14 @@
                         <Grid Width="34" Height="34">
                             <Border CornerRadius="10" Background="{DynamicResource ElevatedBrush}"
                                     BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1" />
-                            <Image Source="{x:Static ram:AppIcon.Image}" Width="22" Height="22"
+                            <Image Width="22" Height="22"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                                   UseLayoutRounding="True"
+                                   RenderOptions.BitmapScalingMode="HighQuality">
+                                <Image.Source>
+                                    <BitmapImage UriSource="pack://application:,,,/Assets/app.ico" DecodePixelWidth="48" />
+                                </Image.Source>
+                            </Image>
                         </Grid>
                         <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="Account Manager" FontWeight="SemiBold" FontSize="13.5"

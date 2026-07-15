@@ -56,7 +56,7 @@ public static class LauncherService
 
     /// <param name="jobId">optional specific server</param>
     /// <param name="followUserId">optional user to follow into their game</param>
-    public static async Task<LaunchResult> LaunchAsync(Account acc, long placeId, string? jobId = null, long followUserId = 0)
+    public static async Task<LaunchResult> LaunchAsync(Account acc, long placeId, string? jobId = null, long followUserId = 0, string? privateLinkCode = null, string? accessCode = null)
     {
         var settings = SettingsService.Current;
         EnsureMultiInstance(settings.EnableMultiInstance);
@@ -86,14 +86,27 @@ public static class LauncherService
 
         long launchTime = (long)Math.Floor((DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds);
 
+        // Sanitise a pasted Job ID: trim stray whitespace/quotes/commas from copy-paste. Blank -> normal join.
+        jobId = jobId?.Trim().Trim('"', '\'', ',', ' ');
+        if (string.IsNullOrWhiteSpace(jobId)) jobId = null;
+
         string placeLauncherUrl;
         if (followUserId > 0)
         {
             placeLauncherUrl = $"https://assetgame.roblox.com/game/PlaceLauncher.ashx?request=RequestFollowUser&userId={followUserId}";
         }
+        else if (!string.IsNullOrEmpty(privateLinkCode) || !string.IsNullOrEmpty(accessCode))
+        {
+            // Private server: joined via its shared link code and/or access code (owned VIP server).
+            placeLauncherUrl = "https://assetgame.roblox.com/game/PlaceLauncher.ashx?request=RequestPrivateGame"
+                             + $"&browserTrackerId={tracker}&placeId={placeId}"
+                             + $"&accessCode={Uri.EscapeDataString(accessCode ?? "")}"
+                             + $"&linkCode={Uri.EscapeDataString(privateLinkCode ?? "")}"
+                             + "&isPlayTogetherGame=false";
+        }
         else if (!string.IsNullOrEmpty(jobId))
         {
-            placeLauncherUrl = $"https://assetgame.roblox.com/game/PlaceLauncher.ashx?request=RequestGameJob&browserTrackerId={tracker}&placeId={placeId}&gameId={jobId}&isPlayTogetherGame=false";
+            placeLauncherUrl = $"https://assetgame.roblox.com/game/PlaceLauncher.ashx?request=RequestGameJob&browserTrackerId={tracker}&placeId={placeId}&gameId={Uri.EscapeDataString(jobId)}&isPlayTogetherGame=false";
         }
         else
         {

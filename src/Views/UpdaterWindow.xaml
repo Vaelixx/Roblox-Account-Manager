@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ram="clr-namespace:RobloxAccountManager"
         Title="Updating Roblox Account Manager"
-        Icon="{x:Static ram:AppIcon.Image}"
+        Icon="pack://application:,,,/Assets/app.ico"
         Width="440" Height="240"
         WindowStyle="None" ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
