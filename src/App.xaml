@@ -1,0 +1,29 @@
+<Application xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mvvm="clr-namespace:RobloxAccountManager.Mvvm"
+             x:Class="RobloxAccountManager.App"
+             ShutdownMode="OnMainWindowClose">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Colors.xaml" />
+                <ResourceDictionary Source="Themes/Icons.xaml" />
+                <ResourceDictionary Source="Themes/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Shared converter instances -->
+            <mvvm:IconKeyConverter x:Key="IconKeyConverter" />
+            <mvvm:BoolToVis x:Key="BoolToVis" />
+            <mvvm:BoolToVis x:Key="InverseBoolToVis" Invert="True" />
+            <mvvm:NullToVis x:Key="NullToVis" />
+            <mvvm:NullToVis x:Key="InverseNullToVis" Invert="True" />
+            <mvvm:InverseBool x:Key="InverseBool" />
+            <mvvm:HexToBrush x:Key="HexToBrush" />
+            <mvvm:UrlToImage x:Key="UrlToImage" />
+            <mvvm:CountToVis x:Key="CountZeroToVis" WhenZero="True" />
+            <mvvm:CountToVis x:Key="CountNonZeroToVis" WhenZero="False" />
+            <mvvm:FillToWidth x:Key="FillToWidth" />
+            <mvvm:MaskConverter x:Key="MaskConverter" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

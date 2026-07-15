@@ -1,0 +1,51 @@
+<Window x:Class="RobloxAccountManager.Views.ChromiumDownloadDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Width="480" SizeToContent="Height" ShowInTaskbar="False">
+    <Border Margin="18" CornerRadius="{StaticResource RadiusLg}"
+            Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1"
+            Effect="{StaticResource ShadowSoft}"
+            TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <Border Width="34" Height="34" CornerRadius="9" Background="{DynamicResource AccentSoftBrush}">
+                    <Path Data="{StaticResource Icon.Import}" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.8"
+                          Width="17" Height="17" Stretch="Uniform" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                </Border>
+                <TextBlock Text="Download Chromium" Style="{StaticResource DisplayText}" FontSize="16"
+                           Margin="12,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <TextBlock Grid.Row="1" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,10,0,16"
+                       Text="A private, portable Chromium is downloaded once (~330 MB) into the app's data folder. It's used only to open your accounts — separate from Edge/Chrome and your normal browsing." />
+
+            <!-- progress -->
+            <Grid Grid.Row="2">
+                <Border x:Name="Track" Height="8" CornerRadius="4" Background="{DynamicResource SurfaceAltBrush}" />
+                <Border x:Name="Fill" Height="8" CornerRadius="4" Width="0" HorizontalAlignment="Left"
+                        Background="{DynamicResource AccentBrush}" />
+            </Grid>
+
+            <Grid Grid.Row="3" Margin="0,10,0,0">
+                <TextBlock x:Name="PhaseText" Text="Starting…" Style="{StaticResource Label}" />
+                <TextBlock x:Name="SizeText" Text="" Style="{StaticResource Caption}" HorizontalAlignment="Right" />
+            </Grid>
+
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button x:Name="CancelBtn" Style="{StaticResource GhostButton}" Content="Cancel"
+                        Width="104" Click="Cancel_Click" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

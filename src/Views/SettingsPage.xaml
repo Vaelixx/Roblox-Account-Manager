@@ -1,0 +1,196 @@
+<UserControl x:Class="RobloxAccountManager.Views.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
+        <StackPanel Margin="24,8,24,24" MaxWidth="720" HorizontalAlignment="Left">
+
+            <!-- ===== Launch ===== -->
+            <TextBlock Text="Launch" Style="{StaticResource DisplayText}" FontSize="15" Margin="2,0,0,10" />
+            <Border Style="{StaticResource Card}" Padding="4" Margin="0,0,0,20">
+                <StackPanel>
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Multi-instance" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Run more than one Roblox client at the same time." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding EnableMultiInstance}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Close previous client" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="When relaunching an account, close its earlier window first." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding AutoCloseLastProcess}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Launch delay" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Seconds to wait between each account when launching several." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <TextBox Width="90" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 Text="{Binding AccountJoinDelay, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Smart Join picks emptiest server" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Otherwise a random non-full public server is chosen." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding ShuffleLowestServer}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Server scan pages" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="How many pages (×100 servers) Smart Join scans." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <TextBox Width="90" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 Text="{Binding ShufflePageCount, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Performance ===== -->
+            <TextBlock Text="Performance" Style="{StaticResource DisplayText}" FontSize="15" Margin="2,0,0,10" />
+            <Border Style="{StaticResource Card}" Padding="4" Margin="0,0,0,20">
+                <StackPanel>
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Unlock FPS" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Writes a ClientAppSettings FPS cap before launching." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding UnlockFps}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="FPS cap" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Target frame rate when Unlock FPS is on." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <TextBox Width="90" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 Text="{Binding MaxFps, UpdateSourceTrigger=LostFocus}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Live data ===== -->
+            <TextBlock Text="Live data" Style="{StaticResource DisplayText}" FontSize="15" Margin="2,0,0,10" />
+            <Border Style="{StaticResource Card}" Padding="4" Margin="0,0,0,20">
+                <StackPanel>
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Show avatars" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Load headshot thumbnails for each account." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding ShowThumbnails}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Show presence" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Display online / in-game status." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding ShowPresence}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Show Robux" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Fetch each account's Robux balance." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding ShowRobux}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Interface ===== -->
+            <TextBlock Text="Interface" Style="{StaticResource DisplayText}" FontSize="15" Margin="2,0,0,10" />
+            <Border Style="{StaticResource Card}" Padding="4" Margin="0,0,0,20">
+                <StackPanel>
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Hide usernames" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Mask usernames for screenshots / streaming." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding HideUsernames}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Close to tray" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Closing the window minimizes to the system tray instead of quitting. Double-click the tray icon to reopen; right-click for Exit." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding MinimizeToTray}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Browser ===== -->
+            <TextBlock Text="Browser" Style="{StaticResource DisplayText}" FontSize="15" Margin="2,0,0,10" />
+            <Border Style="{StaticResource Card}" Padding="18" Margin="0,0,0,20">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource Icon.External}" Style="{StaticResource IconPath}" Width="16" Height="16"
+                              Stroke="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ChromiumStatus}" Margin="10,0,0,0" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Button Style="{StaticResource PrimaryButton}" Command="{Binding DownloadChromiumCommand}"
+                            Content="{Binding ChromiumButtonText}" Width="200" HorizontalAlignment="Left" Margin="0,14,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Security ===== -->
+            <TextBlock Text="Security" Style="{StaticResource DisplayText}" FontSize="15" Margin="2,0,0,10" />
+            <Border Style="{StaticResource Card}" Padding="18" Margin="0,0,0,20">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource Icon.Lock}" Style="{StaticResource IconPath}" Width="16" Height="16"
+                              Stroke="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding PasswordStatus}" Margin="10,0,0,0" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button Style="{StaticResource PrimaryButton}" Command="{Binding SetPasswordCommand}" Width="180">
+                            <TextBlock Text="Set / change password" />
+                        </Button>
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding RemovePasswordCommand}" Margin="10,0,0,0" Width="150"
+                                Visibility="{Binding HasMasterPassword, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="Remove password" />
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== About ===== -->
+            <TextBlock Text="About" Style="{StaticResource DisplayText}" FontSize="15" Margin="2,0,0,10" />
+            <Border Style="{StaticResource Card}" Padding="18">
+                <Grid>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Roblox Account Manager" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <TextBlock Text="{Binding AppVersion}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                    </StackPanel>
+                    <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Command="{Binding OpenDataFolderCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon.Folder}" Style="{StaticResource IconPath}" Width="15" Height="15" />
+                            <TextBlock Text="Open data folder" Margin="7,0,0,0" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

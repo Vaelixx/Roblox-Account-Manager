@@ -1,0 +1,172 @@
+<UserControl x:Class="RobloxAccountManager.Views.ServerBrowserPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:RobloxAccountManager.Models">
+
+    <Grid Margin="24,8,24,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <Grid Grid.Row="0" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox Grid.Column="0" Width="220" Text="{Binding PlaceIdText, UpdateSourceTrigger=PropertyChanged}"
+                     VerticalContentAlignment="Center" />
+            <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Command="{Binding RefreshCommand}">
+                <StackPanel Orientation="Horizontal">
+                    <Path Data="{StaticResource Icon.Refresh}" Stroke="{DynamicResource OnAccentBrush}" StrokeThickness="1.7"
+                          Width="16" Height="16" Stretch="Uniform" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    <TextBlock Text="Load servers" Margin="8,0,0,0" />
+                </StackPanel>
+            </Button>
+
+            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="{Binding PlaceName}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold"
+                           MaxWidth="240" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <Border CornerRadius="999" Background="{DynamicResource SurfaceAltBrush}" Padding="9,3" Margin="10,0,0,0"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ServerCount, StringFormat='{}{0} servers'}" FontSize="11"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <!-- Server list -->
+        <Border Grid.Row="1" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- column headers -->
+                <Grid Grid.Row="0" Margin="18,14,18,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="90" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="JOB ID" Style="{StaticResource Caption}" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="1" Text="PLAYERS" Style="{StaticResource Caption}" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="2" Text="FPS" Style="{StaticResource Caption}" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="3" Text="PING" Style="{StaticResource Caption}" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="4" Text="TYPE" Style="{StaticResource Caption}" FontWeight="SemiBold" />
+                </Grid>
+
+                <Border Grid.Row="0" Height="1" VerticalAlignment="Bottom" Background="{DynamicResource HairlineBrush}" />
+
+                <ListView Grid.Row="1" x:Name="ServerList" ItemsSource="{Binding Servers}"
+                          SelectedItem="{Binding Selected, Mode=TwoWay}"
+                          Background="Transparent" BorderThickness="0" Padding="10,4"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Margin" Value="0,1" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <Border x:Name="bd" CornerRadius="8" Padding="8,9" Background="Transparent"
+                                                BorderThickness="1" BorderBrush="Transparent">
+                                            <ContentPresenter />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource ElevatedBrush}" />
+                                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+
+                    <ListView.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:GameServer}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="90" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Text="{Binding ShortId}" FontFamily="{StaticResource MonoFont}" FontSize="12.5"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="{Binding PlayingDisplay}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                    <Border Height="4" CornerRadius="2" Background="{DynamicResource HairlineStrongBrush}" Margin="0,4,0,0">
+                                        <Border HorizontalAlignment="Left" CornerRadius="2" Background="{DynamicResource AccentBrush}"
+                                                Width="{Binding Fill, Converter={StaticResource FillToWidth}, ConverterParameter=118}" />
+                                    </Border>
+                                </StackPanel>
+
+                                <TextBlock Grid.Column="2" Text="{Binding FpsDisplay}" VerticalAlignment="Center" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBlock Grid.Column="3" Text="{Binding PingDisplay}" VerticalAlignment="Center" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <Border Grid.Column="4" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="6"
+                                        Padding="8,3" Background="{DynamicResource SurfaceAltBrush}">
+                                    <TextBlock Text="{Binding Type}" FontSize="10.5" Foreground="{DynamicResource TextMutedBrush}" />
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!-- empty state -->
+                <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
+                            Visibility="{Binding ServerCount, Converter={StaticResource CountZeroToVis}}">
+                    <Border Width="56" Height="56" CornerRadius="16" HorizontalAlignment="Center"
+                            Background="{DynamicResource SurfaceAltBrush}">
+                        <Path Data="{StaticResource Icon.Servers}" Style="{StaticResource IconPath}" Width="26" Height="26"
+                              Stroke="{DynamicResource TextMutedBrush}" />
+                    </Border>
+                    <TextBlock Text="No servers loaded" HorizontalAlignment="Center" Margin="0,14,0,0"
+                               FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBlock Text="Enter a Place ID and press Load servers." HorizontalAlignment="Center" Margin="0,4,0,0"
+                               FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                </StackPanel>
+
+                <!-- footer actions -->
+                <Border Grid.Row="2" Height="1" VerticalAlignment="Top" Background="{DynamicResource HairlineBrush}" />
+                <Grid Grid.Row="2" Margin="18,12">
+                    <TextBlock Text="Joins with the account selected on the Accounts page." VerticalAlignment="Center"
+                               FontSize="11.5" Foreground="{DynamicResource TextMutedBrush}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding CopyJobIdCommand}" Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource Icon.Copy}" Style="{StaticResource IconPath}" Width="15" Height="15" />
+                                <TextBlock Text="Copy Job ID" Margin="7,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource PrimaryButton}" Command="{Binding JoinCommand}" Width="120">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource Icon.Play}" Fill="{DynamicResource OnAccentBrush}"
+                                      Stroke="{DynamicResource OnAccentBrush}" Width="13" Height="13" Stretch="Uniform" />
+                                <TextBlock Text="Join server" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
