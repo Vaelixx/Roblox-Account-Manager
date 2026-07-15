@@ -7,7 +7,7 @@
 #       RobloxAccountManager.exe (the auto-updater expects an asset
 #       whose name ends in .exe on /releases/latest)
 #
-#  Usage:  double-click publish.bat
+#  Usage:  double-click release.bat
 #     or:  powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1
 # =====================================================================
 $ErrorActionPreference = "Stop"
