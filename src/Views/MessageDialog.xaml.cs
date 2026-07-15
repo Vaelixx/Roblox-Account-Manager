@@ -12,7 +12,7 @@ public partial class MessageDialog : Window
     public string ResultText { get; private set; } = "";
 
     public MessageDialog(Kind kind, string title, string message, string initial = "",
-        string okText = "OK", bool showCancel = true)
+        string okText = "OK", bool showCancel = true, string cancelText = "Cancel")
     {
         InitializeComponent();
         _kind = kind;
@@ -20,6 +20,7 @@ public partial class MessageDialog : Window
         MessageText.Text = message;
         MessageText.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
         OkBtn.Content = okText;
+        CancelBtn.Content = cancelText;
         CancelBtn.Visibility = showCancel ? Visibility.Visible : Visibility.Collapsed;
 
         switch (kind)

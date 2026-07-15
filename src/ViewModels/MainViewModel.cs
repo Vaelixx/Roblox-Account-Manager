@@ -108,16 +108,26 @@ public class MainViewModel : ObservableObject
             _update = info;
             UpdateVersionText = $"Update available — {info.VersionText}";
             OnPropertyChanged(nameof(UpdateAvailable));
+
+            // Proactively surface the update once with an Update / Later prompt.
+            // "Later" just leaves the title-bar pill in place so it can be triggered any time.
+            PromptForUpdate(info);
         });
     }
 
+    // Triggered by the title-bar update pill.
     private void UpdateNow()
     {
-        if (_update is not { } info) return;
+        if (_update is { } info) PromptForUpdate(info);
+    }
 
-        if (!DialogService.Confirm("Install update",
-                $"{info.VersionText} is available. The app will close, install the update and restart.\n\nUpdate now?"))
-            return;
+    private void PromptForUpdate(UpdateInfo info)
+    {
+        if (!DialogService.Confirm(
+                "Update available",
+                $"{info.VersionText} is available.\nThe app will close, install the update and restart.",
+                okText: "Update", cancelText: "Later"))
+            return; // "Later" — keep the pill, do nothing
 
         if (UpdateService.BeginUpdate(info))
             Application.Current.Shutdown();

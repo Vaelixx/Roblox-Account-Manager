@@ -29,16 +29,16 @@ public static class DialogService
     }
 
     private static MessageDialog Make(MessageDialog.Kind kind, string title, string message,
-        string initial = "", string okText = "OK", bool showCancel = true)
+        string initial = "", string okText = "OK", bool showCancel = true, string cancelText = "Cancel")
     {
-        var dlg = new MessageDialog(kind, title, message, initial, okText, showCancel);
+        var dlg = new MessageDialog(kind, title, message, initial, okText, showCancel, cancelText);
         AttachOwner(dlg);
         return dlg;
     }
 
-    public static bool Confirm(string title, string message)
+    public static bool Confirm(string title, string message, string okText = "Confirm", string cancelText = "Cancel")
     {
-        var dlg = Make(MessageDialog.Kind.Confirm, title, message, okText: "Confirm");
+        var dlg = Make(MessageDialog.Kind.Confirm, title, message, okText: okText, cancelText: cancelText);
         return dlg.ShowDialog() == true;
     }
 
