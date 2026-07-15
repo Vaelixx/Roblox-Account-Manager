@@ -24,3 +24,8 @@ error.log
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Dev-Build/Release-Skripte (nicht im oeffentlichen Repo)
+publish.ps1
+release.bat
+release.ps1
