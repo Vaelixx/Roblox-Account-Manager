@@ -91,6 +91,15 @@
                                             <TextBlock Text="{Binding StatusLine}" FontSize="11"
                                                        Foreground="{Binding PresenceColor, Converter={StaticResource HexToBrush}}"
                                                        TextTrimming="CharacterEllipsis" />
+                                            <!-- sub-place badge: friend is in a teleport/co-edit place, not the root game -->
+                                            <Border CornerRadius="4" Padding="5,0" Margin="6,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    Background="{DynamicResource AccentBrush}"
+                                                    ToolTip="{Binding SubPlaceTip}"
+                                                    Visibility="{Binding IsSubPlace, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="SUB-PLACE" FontSize="9" FontWeight="SemiBold"
+                                                           Foreground="White" VerticalAlignment="Center" />
+                                            </Border>
                                         </StackPanel>
                                     </StackPanel>
 

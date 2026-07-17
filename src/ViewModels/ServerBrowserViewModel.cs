@@ -18,6 +18,13 @@ public class ServerBrowserViewModel : ObservableObject
     private string _placeName = "";
     public string PlaceName { get => _placeName; set => SetField(ref _placeName, value); }
 
+    private bool _isSubPlace;
+    /// <summary>True when the browsed Place ID is a sub-place (teleport/co-edit) of its universe, not the root game.</summary>
+    public bool IsSubPlace { get => _isSubPlace; set => SetField(ref _isSubPlace, value); }
+
+    private string _subPlaceTip = "";
+    public string SubPlaceTip { get => _subPlaceTip; set => SetField(ref _subPlaceTip, value); }
+
     private GameServer? _selected;
     public GameServer? Selected { get => _selected; set => SetField(ref _selected, value); }
 
@@ -53,11 +60,18 @@ public class ServerBrowserViewModel : ObservableObject
         OnPropertyChanged(nameof(ServerCount));
         _main.SetStatus("Loading servers…");
 
+        IsSubPlace = false;
+        SubPlaceTip = "";
         var cookie = _store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie;
         if (cookie != null)
         {
             var info = await RobloxApi.GetPlaceInfoAsync(cookie, placeId);
             PlaceName = info?.Name ?? $"Place {placeId}";
+            if (info != null && info.IsSubPlace)
+            {
+                IsSubPlace = true;
+                SubPlaceTip = $"Place {info.PlaceId} is a sub-place of universe {info.UniverseId} (root place {info.RootPlaceId}). Servers here are teleport/co-edit instances, not the main game.";
+            }
         }
 
         var list = await RobloxApi.GetPublicServersAsync(placeId, SettingsService.Current.ShufflePageCount);

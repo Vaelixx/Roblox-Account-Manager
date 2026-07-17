@@ -264,13 +264,68 @@ public static class RobloxApi
             if (!resp.IsSuccessStatusCode) return result;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             if (!doc.RootElement.TryGetProperty("data", out var data)) return result;
+
+            // Collect ids + whatever names the friends endpoint happened to include.
+            var raw = new List<(long id, string name, string disp)>();
             foreach (var f in data.EnumerateArray())
             {
                 long id = f.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt64() : 0;
                 if (id <= 0) continue;
                 string name = f.TryGetProperty("name", out var nEl) ? (nEl.GetString() ?? "") : "";
                 string disp = f.TryGetProperty("displayName", out var dEl) ? (dEl.GetString() ?? "") : "";
-                result.Add(new Friend { UserId = id, Username = name, DisplayName = disp });
+                raw.Add((id, name, disp));
+            }
+
+            // Roblox's /friends endpoint no longer reliably returns name / displayName,
+            // which made every friend show up as "Unknown". Batch-resolve any missing
+            // names through the public users API so the list always shows real names.
+            var missing = raw.Where(r => string.IsNullOrEmpty(r.name)).Select(r => r.id).ToList();
+            if (missing.Count > 0)
+            {
+                var info = await GetUsersInfoAsync(missing);
+                for (int i = 0; i < raw.Count; i++)
+                {
+                    if (info.TryGetValue(raw[i].id, out var u))
+                    {
+                        string name = string.IsNullOrEmpty(raw[i].name) ? u.name : raw[i].name;
+                        string disp = string.IsNullOrEmpty(raw[i].disp) ? u.disp : raw[i].disp;
+                        raw[i] = (raw[i].id, name, disp);
+                    }
+                }
+            }
+
+            foreach (var r in raw)
+                result.Add(new Friend { UserId = r.id, Username = r.name, DisplayName = r.disp });
+        }
+        catch { }
+        return result;
+    }
+
+    /// <summary>
+    /// Batch username / display-name lookup via the public users API
+    /// (POST https://users.roblox.com/v1/users). Works without a cookie and is the
+    /// reliable source of names now that the friends endpoint omits them.
+    /// </summary>
+    public static async Task<Dictionary<long, (string name, string disp)>> GetUsersInfoAsync(IEnumerable<long> userIds)
+    {
+        var result = new Dictionary<long, (string name, string disp)>();
+        var ids = userIds.Where(i => i > 0).Distinct().ToArray();
+        if (ids.Length == 0) return result;
+        try
+        {
+            var resp = await Http.SendAsync(Build(HttpMethod.Post,
+                "https://users.roblox.com/v1/users", "",
+                content: Json(new { userIds = ids, excludeBannedUsers = false })));
+            if (!resp.IsSuccessStatusCode) return result;
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            if (!doc.RootElement.TryGetProperty("data", out var data)) return result;
+            foreach (var u in data.EnumerateArray())
+            {
+                long id = u.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt64() : 0;
+                if (id <= 0) continue;
+                string name = u.TryGetProperty("name", out var nEl) ? (nEl.GetString() ?? "") : "";
+                string disp = u.TryGetProperty("displayName", out var dEl) ? (dEl.GetString() ?? "") : "";
+                result[id] = (name, disp);
             }
         }
         catch { }
@@ -357,7 +412,11 @@ public static class RobloxApi
     // ---------------------------------------------------------------
     //  Game / place info
     // ---------------------------------------------------------------
-    public record PlaceInfo(long PlaceId, long UniverseId, string Name, string Creator);
+    public record PlaceInfo(long PlaceId, long UniverseId, string Name, string Creator, long RootPlaceId)
+    {
+        /// <summary>True when the queried place is a sub-place (teleport/co-edit) rather than the universe's root game.</summary>
+        public bool IsSubPlace => PlaceId > 0 && RootPlaceId > 0 && PlaceId != RootPlaceId;
+    }
 
     public static async Task<PlaceInfo?> GetPlaceInfoAsync(string cookie, long placeId)
     {
@@ -372,15 +431,17 @@ public static class RobloxApi
 
             var gResp = await Http.SendAsync(Build(HttpMethod.Get,
                 $"https://games.roblox.com/v1/games?universeIds={universeId}", cookie));
-            if (!gResp.IsSuccessStatusCode) return new PlaceInfo(placeId, universeId, $"Place {placeId}", "");
+            if (!gResp.IsSuccessStatusCode) return new PlaceInfo(placeId, universeId, $"Place {placeId}", "", 0);
             using var gDoc = JsonDocument.Parse(await gResp.Content.ReadAsStringAsync());
             var data = gDoc.RootElement.GetProperty("data");
-            if (data.GetArrayLength() == 0) return new PlaceInfo(placeId, universeId, $"Place {placeId}", "");
+            if (data.GetArrayLength() == 0) return new PlaceInfo(placeId, universeId, $"Place {placeId}", "", 0);
             var first = data[0];
             string name = first.GetProperty("name").GetString() ?? $"Place {placeId}";
             string creator = first.TryGetProperty("creator", out var c) && c.TryGetProperty("name", out var cn)
                 ? cn.GetString() ?? "" : "";
-            return new PlaceInfo(placeId, universeId, name, creator);
+            long rootPlaceId = first.TryGetProperty("rootPlaceId", out var rp) && rp.ValueKind == JsonValueKind.Number
+                ? rp.GetInt64() : 0;
+            return new PlaceInfo(placeId, universeId, name, creator, rootPlaceId);
         }
         catch { return null; }
     }

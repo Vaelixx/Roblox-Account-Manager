@@ -38,6 +38,8 @@ public class Friend : ObservableObject
                 OnPropertyChanged(nameof(IsInGame));
                 OnPropertyChanged(nameof(CanJoin));
                 OnPropertyChanged(nameof(StatusLine));
+                OnPropertyChanged(nameof(IsSubPlace));
+                OnPropertyChanged(nameof(SubPlaceTip));
             }
         }
     }
@@ -70,10 +72,18 @@ public class Friend : ObservableObject
 
     // ---- join target (populated from rich presence) ----
     private long _placeId;
-    public long PlaceId { get => _placeId; set { if (SetField(ref _placeId, value)) OnPropertyChanged(nameof(CanJoin)); } }
+    public long PlaceId
+    {
+        get => _placeId;
+        set { if (SetField(ref _placeId, value)) { OnPropertyChanged(nameof(CanJoin)); OnPropertyChanged(nameof(IsSubPlace)); OnPropertyChanged(nameof(SubPlaceTip)); } }
+    }
 
     private long _rootPlaceId;
-    public long RootPlaceId { get => _rootPlaceId; set { if (SetField(ref _rootPlaceId, value)) OnPropertyChanged(nameof(CanJoin)); } }
+    public long RootPlaceId
+    {
+        get => _rootPlaceId;
+        set { if (SetField(ref _rootPlaceId, value)) { OnPropertyChanged(nameof(CanJoin)); OnPropertyChanged(nameof(IsSubPlace)); OnPropertyChanged(nameof(SubPlaceTip)); } }
+    }
 
     private string? _jobId;
     public string? JobId { get => _jobId; set => SetField(ref _jobId, value); }
@@ -82,4 +92,19 @@ public class Friend : ObservableObject
 
     /// <summary>True only when the friend is in a game we can follow them into.</summary>
     [JsonIgnore] public bool CanJoin => IsInGame && (RootPlaceId > 0 || PlaceId > 0);
+
+    /// <summary>
+    /// True when the friend is in a *sub-place* of a universe rather than its root game —
+    /// i.e. a teleport/co-edit place whose PlaceId differs from the universe's RootPlaceId.
+    /// Following them still lands in the right universe, but they're not on the main place.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsSubPlace =>
+        IsInGame && PlaceId > 0 && RootPlaceId > 0 && PlaceId != RootPlaceId;
+
+    /// <summary>Tooltip explaining the sub-place badge.</summary>
+    [JsonIgnore]
+    public string SubPlaceTip => IsSubPlace
+        ? $"Sub-place of this game (place {PlaceId} · root {RootPlaceId})"
+        : "";
 }

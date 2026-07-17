@@ -139,6 +139,11 @@
                                         <TextBlock Text="{Binding Presence}" Foreground="{Binding PresenceColor}"
                                                    VerticalAlignment="Center" FontSize="12" FontWeight="Medium"
                                                    MinWidth="58" TextAlignment="Right" />
+                                        <Border Margin="6,0,0,0" Padding="4,0" CornerRadius="3" VerticalAlignment="Center"
+                                                Background="{DynamicResource AccentBrush}" ToolTip="{Binding SubPlaceTip}"
+                                                Visibility="{Binding IsSubPlace, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="SUB" FontSize="9" FontWeight="Bold" Foreground="White" />
+                                        </Border>
                                     </StackPanel>
                                 </Grid>
                             </Border>

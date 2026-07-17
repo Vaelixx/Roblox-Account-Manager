@@ -109,6 +109,11 @@
                                             <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                                                 <TextBlock Text="{Binding Presence}" FontSize="11"
                                                            Foreground="{Binding PresenceColor, Converter={StaticResource HexToBrush}}" />
+                                                <Border Margin="5,0,0,0" Padding="4,0" CornerRadius="3" VerticalAlignment="Center"
+                                                        Background="{DynamicResource AccentBrush}" ToolTip="{Binding SubPlaceTip}"
+                                                        Visibility="{Binding IsSubPlace, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="SUB" FontSize="9" FontWeight="Bold" Foreground="White" />
+                                                </Border>
                                                 <TextBlock Text="•" FontSize="11" Margin="6,0" Foreground="{DynamicResource TextMutedBrush}" />
                                                 <Path Data="{StaticResource Icon.Robux}" Stroke="{DynamicResource TextMutedBrush}"
                                                       StrokeThickness="1.5" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" />

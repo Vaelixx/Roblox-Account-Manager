@@ -263,9 +263,22 @@ public class AccountStore
         if (accounts.Count == 0) return;
         var authCookie = accounts.FirstOrDefault(a => a.IsValid)?.Cookie;
         if (authCookie == null) return;
-        var pres = await RobloxApi.GetPresencesAsync(authCookie, accounts.Select(a => a.UserId));
+        var pres = await RobloxApi.GetPresenceDetailsAsync(authCookie, accounts.Select(a => a.UserId));
         foreach (var a in accounts)
-            a.Presence = pres.TryGetValue(a.UserId, out var p) ? p : "Offline";
+        {
+            if (pres.TryGetValue(a.UserId, out var p))
+            {
+                a.Presence = p.Status;
+                a.PlaceId = p.PlaceId;
+                a.RootPlaceId = p.RootPlaceId;
+            }
+            else
+            {
+                a.Presence = "Offline";
+                a.PlaceId = 0;
+                a.RootPlaceId = 0;
+            }
+        }
     }
 
     public async Task RefreshIdentityAsync(Account acc)

@@ -67,6 +67,17 @@ public class Account : ObservableObject
         _ => "#63636C"
     };
 
+    private long _placeId;
+    [JsonIgnore] public long PlaceId { get => _placeId; set { SetField(ref _placeId, value); OnPropertyChanged(nameof(IsSubPlace)); OnPropertyChanged(nameof(SubPlaceTip)); } }
+
+    private long _rootPlaceId;
+    [JsonIgnore] public long RootPlaceId { get => _rootPlaceId; set { SetField(ref _rootPlaceId, value); OnPropertyChanged(nameof(IsSubPlace)); OnPropertyChanged(nameof(SubPlaceTip)); } }
+
+    // True when the account is in a sub-place (a different PlaceId than the experience's root PlaceId).
+    [JsonIgnore] public bool IsSubPlace => PlaceId > 0 && RootPlaceId > 0 && PlaceId != RootPlaceId;
+
+    [JsonIgnore] public string SubPlaceTip => IsSubPlace ? $"Sub-place (place {PlaceId} in experience {RootPlaceId})" : "";
+
     private string? _thumbnailUrl;
     [JsonIgnore] public string? ThumbnailUrl { get => _thumbnailUrl; set => SetField(ref _thumbnailUrl, value); }
 

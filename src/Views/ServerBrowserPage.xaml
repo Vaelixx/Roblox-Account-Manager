@@ -31,6 +31,12 @@
             <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="{Binding PlaceName}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold"
                            MaxWidth="240" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <!-- sub-place badge: this Place ID is a teleport/co-edit place, not the universe's root game -->
+                <Border CornerRadius="4" Background="{DynamicResource AccentBrush}" Padding="6,1" Margin="10,0,0,0"
+                        VerticalAlignment="Center" ToolTip="{Binding SubPlaceTip}"
+                        Visibility="{Binding IsSubPlace, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="SUB-PLACE" FontSize="9.5" FontWeight="SemiBold" Foreground="White" />
+                </Border>
                 <Border CornerRadius="999" Background="{DynamicResource SurfaceAltBrush}" Padding="9,3" Margin="10,0,0,0"
                         VerticalAlignment="Center">
                     <TextBlock Text="{Binding ServerCount, StringFormat='{}{0} servers'}" FontSize="11"
