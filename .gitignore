@@ -36,3 +36,6 @@ release.ps1
 #  Repo. app.ico wird bewusst getrackt (ApplicationIcon im csproj).
 # ---------------------------------------------------------------------------
 icon.png
+
+# Temp release notes
+_relnotes_*.md
