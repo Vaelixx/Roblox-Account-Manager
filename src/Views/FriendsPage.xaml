@@ -24,8 +24,13 @@
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,8,0" />
                 <ComboBox Width="220" VerticalAlignment="Center"
                           ItemsSource="{Binding Accounts}"
-                          SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
-                          DisplayMemberPath="DisplayNameOrUser" />
+                          SelectedItem="{Binding SelectedAccount, Mode=TwoWay}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:Account}">
+                            <TextBlock Text="{Binding DisplayNameOrUser}" TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
                 <Button Content="Refresh" Command="{Binding RefreshCommand}"
                         Style="{StaticResource GhostButton}" Margin="10,0,0,0" />
             </StackPanel>

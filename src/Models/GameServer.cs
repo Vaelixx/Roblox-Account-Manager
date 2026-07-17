@@ -17,4 +17,7 @@ public class GameServer
 
     // Fill fraction 0..1 for the little capacity meter.
     public double Fill => MaxPlayers > 0 ? Math.Clamp((double)Playing / MaxPlayers, 0, 1) : 0;
+
+    /// <summary>Readable fallback if a control ever shows the raw object.</summary>
+    public override string ToString() => $"{ShortId} · {PlayingDisplay}";
 }

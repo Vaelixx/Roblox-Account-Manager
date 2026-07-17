@@ -22,6 +22,9 @@ public class Friend : ObservableObject
 
     [JsonIgnore] public string AtUsername => "@" + Username;
 
+    /// <summary>Readable fallback if a control ever shows the raw object.</summary>
+    public override string ToString() => DisplayNameOrUser;
+
     private string _presence = "Offline";
     /// <summary>"Online" | "In Game" | "In Studio" | "Offline".</summary>
     public string Presence

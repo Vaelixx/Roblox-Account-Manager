@@ -90,6 +90,13 @@ public class Account : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Human-readable fallback so any control that shows the raw object (e.g. a ComboBox
+    /// selection box before its item template has been realized) renders the account name
+    /// instead of "RobloxAccountManager.Models.Account".
+    /// </summary>
+    public override string ToString() => DisplayNameOrUser;
+
     // Helpers to raise change notifications after a live refresh.
     public void RaiseIdentityChanged()
     {

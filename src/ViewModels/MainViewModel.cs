@@ -117,10 +117,11 @@ public class MainViewModel : ObservableObject
             _ = CheckForUpdateAsync();
         }
 
-        // Then keep polling once a minute so a freshly published release is picked up fast.
-        // The modal only appears once per version (see CheckForUpdateAsync); the title-bar
-        // pill just stays put, so the recurring check never nags the user.
-        _updateTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        // Then keep polling every 5 minutes so a freshly published release is picked up
+        // without hammering GitHub with a request every single minute. The modal only
+        // appears once per version (see CheckForUpdateAsync); the title-bar pill just stays
+        // put, so the recurring check never nags the user.
+        _updateTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
         _updateTimer.Tick += (_, _) => _ = CheckForUpdateAsync();
         _updateTimer.Start();
     }
