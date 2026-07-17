@@ -91,6 +91,10 @@ public class AccountStore
         public DateTime LastUse { get; set; }
         public string Alias { get; set; } = "";
         public string Description { get; set; } = "";
+        public string TotpSecret { get; set; } = "";       // DPAPI-protected, like Cookie
+        public string ProxyUrl { get; set; } = "";
+        public string FFlags { get; set; } = "";
+        public bool AutoRejoin { get; set; }
 
         public static Persisted FromAccount(Account a) => new()
         {
@@ -103,7 +107,11 @@ public class AccountStore
             Fields = a.Fields,
             LastUse = a.LastUse,
             Alias = a.Alias,
-            Description = a.Description
+            Description = a.Description,
+            TotpSecret = Crypto.ProtectString(a.TotpSecret),
+            ProxyUrl = a.ProxyUrl,
+            FFlags = a.FFlags,
+            AutoRejoin = a.AutoRejoin
         };
 
         public Account ToAccount() => new()
@@ -117,7 +125,11 @@ public class AccountStore
             Fields = Fields ?? new(),
             LastUse = LastUse,
             Alias = Alias,
-            Description = Description
+            Description = Description,
+            TotpSecret = Crypto.UnprotectString(TotpSecret),
+            ProxyUrl = ProxyUrl ?? "",
+            FFlags = FFlags ?? "",
+            AutoRejoin = AutoRejoin
         };
     }
 
@@ -226,6 +238,34 @@ public class AccountStore
                 if (rbx >= 0) a.Robux = rbx;
             }
         }
+
+        // Economy: collectible RAP + premium membership (heavier, one pass per account).
+        if (settings.TrackEconomy)
+        {
+            foreach (var a in accounts)
+            {
+                if (!a.IsValid) continue;
+                var (rap, _) = await RobloxApi.GetCollectiblesRapAsync(a.Cookie, a.UserId);
+                if (rap >= 0) a.Rap = rap;
+                a.IsPremium = await RobloxApi.GetPremiumAsync(a.Cookie, a.UserId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lightweight presence-only refresh for the live dashboard timer. Skips the
+    /// thumbnail and robux calls so it can run on a short cadence without hammering
+    /// the economy endpoint; a single authed presence call covers every account.
+    /// </summary>
+    public async Task RefreshPresenceOnlyAsync()
+    {
+        var accounts = Accounts.ToList();
+        if (accounts.Count == 0) return;
+        var authCookie = accounts.FirstOrDefault(a => a.IsValid)?.Cookie;
+        if (authCookie == null) return;
+        var pres = await RobloxApi.GetPresencesAsync(authCookie, accounts.Select(a => a.UserId));
+        foreach (var a in accounts)
+            a.Presence = pres.TryGetValue(a.UserId, out var p) ? p : "Offline";
     }
 
     public async Task RefreshIdentityAsync(Account acc)

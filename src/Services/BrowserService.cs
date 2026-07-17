@@ -31,8 +31,10 @@ public static class BrowserService
 
     public record OpenResult(bool Success, string Message);
 
-    /// <summary>Launches the private CloakBrowser build signed in as this account.</summary>
-    public static async Task<OpenResult> OpenLoggedInAsync(Account acc)
+    /// <summary>Launches the private CloakBrowser build signed in as this account. When
+    /// <paramref name="injectJs"/> is set, the snippet is evaluated in the page once it has settled
+    /// (the "Inject" power-tool — e.g. a bookmarklet run in the authenticated session).</summary>
+    public static async Task<OpenResult> OpenLoggedInAsync(Account acc, string? injectJs = null)
     {
         if (string.IsNullOrEmpty(acc.Cookie))
             return new(false, "This account has no cookie.");
@@ -58,8 +60,9 @@ public static class BrowserService
             if (wsUrl == null)
                 return new(false, "CloakBrowser started but the debugger didn't respond in time.");
 
-            await InjectCookieAndNavigateAsync(wsUrl, acc.Cookie);
-            return new(true, $"Opened {acc.DisplayNameOrUser} in CloakBrowser.");
+            await InjectCookieAndNavigateAsync(wsUrl, acc.Cookie, injectJs);
+            string what = string.IsNullOrWhiteSpace(injectJs) ? "Opened" : "Injected script into";
+            return new(true, $"{what} {acc.DisplayNameOrUser} in CloakBrowser.");
         }
         catch (Exception ex)
         {
@@ -100,7 +103,7 @@ public static class BrowserService
         return null;
     }
 
-    private static async Task InjectCookieAndNavigateAsync(string wsUrl, string cookie)
+    private static async Task InjectCookieAndNavigateAsync(string wsUrl, string cookie, string? injectJs = null)
     {
         using var socket = new ClientWebSocket();
         await socket.ConnectAsync(new Uri(wsUrl), CancellationToken.None);
@@ -117,6 +120,19 @@ public static class BrowserService
             expires = 4102444800.0 // year 2100
         });
         await SendAsync(socket, 3, "Page.navigate", new { url = "https://www.roblox.com/home" });
+
+        if (!string.IsNullOrWhiteSpace(injectJs))
+        {
+            // Let the page load before running the snippet, then evaluate it in the top frame.
+            await SendAsync(socket, 4, "Runtime.enable", new { });
+            await Task.Delay(2500);
+            await SendAsync(socket, 5, "Runtime.evaluate", new
+            {
+                expression = injectJs,
+                userGesture = true,
+                awaitPromise = false
+            });
+        }
 
         // Give the commands a moment to be processed before we drop the socket.
         await Task.Delay(400);

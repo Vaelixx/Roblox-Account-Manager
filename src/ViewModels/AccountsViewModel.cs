@@ -79,8 +79,69 @@ public class AccountsViewModel : ObservableObject
         _main.SetStatus($"Moved {acc.DisplayNameOrUser} to '{g}'.");
     }
 
+    // ---- scale management (#28): bulk colour tags, duplicate scan, export ----
+
+    /// <summary>Checked rows if any are ticked, otherwise the single selected account.</summary>
+    private System.Collections.Generic.List<Account> CheckedOrSelected()
+    {
+        var ticked = _store.Accounts.Where(a => a.IsChecked).ToList();
+        if (ticked.Count > 0) return ticked;
+        return _selected != null
+            ? new System.Collections.Generic.List<Account> { _selected }
+            : new System.Collections.Generic.List<Account>();
+    }
+
+    private void SetColor(string? hex)
+    {
+        var targets = CheckedOrSelected();
+        if (targets.Count == 0) { _main.SetStatus("Check or select accounts to colour first."); return; }
+        foreach (var a in targets) a.Color = hex ?? "";
+        _store.Save();
+        _main.SetStatus(string.IsNullOrEmpty(hex)
+            ? $"Cleared colour on {targets.Count} account(s)."
+            : $"Coloured {targets.Count} account(s).");
+    }
+
+    private void Export()
+    {
+        var ticked = _store.Accounts.Where(a => a.IsChecked).ToList();
+        var scope = ticked.Count > 0 ? ticked : _store.Accounts.ToList();
+        if (scope.Count == 0) { _main.SetStatus("No accounts to export."); return; }
+        string? path = DialogService.SaveFile("Export accounts",
+            "CSV (*.csv)|*.csv|JSON (*.json)|*.json",
+            $"accounts-{System.DateTime.Now:yyyyMMdd-HHmmss}.csv");
+        if (path == null) return;
+        try
+        {
+            bool json = path.EndsWith(".json", System.StringComparison.OrdinalIgnoreCase);
+            string content = json
+                ? ScaleService.ToJson(scope, includeCookies: false)
+                : ScaleService.ToCsv(scope);
+            System.IO.File.WriteAllText(path, content);
+            _main.SetStatus($"Exported {scope.Count} account(s) → {System.IO.Path.GetFileName(path)}.");
+        }
+        catch (System.Exception ex) { DialogService.Info("Export failed", ex.Message); }
+    }
+
+    private void FindDuplicates()
+    {
+        var dupes = ScaleService.FindDuplicates(_store.Accounts);
+        foreach (var a in _store.Accounts) a.IsChecked = false;
+        int n = 0;
+        foreach (var grp in dupes)
+            foreach (var a in grp) { a.IsChecked = true; n++; }
+        if (n == 0)
+            DialogService.Info("Duplicate scan", "No duplicate accounts found — every UserId is unique.");
+        else
+            _main.SetStatus($"{dupes.Count} duplicate set(s) found — {n} accounts checked for review.");
+    }
+
     public bool MaskUsernames => SettingsService.Current.HideUsernames;
     public void RefreshMask() => OnPropertyChanged(nameof(MaskUsernames));
+
+    // View-mode (Card vs Compact) — mirrors the RefreshMask cross-VM pattern; driven by SettingsViewModel.AccountViewMode
+    public bool IsCompact => string.Equals(SettingsService.Current.AccountViewMode, "Compact", System.StringComparison.OrdinalIgnoreCase);
+    public void RefreshViewMode() => OnPropertyChanged(nameof(IsCompact));
 
     private string _placeIdText = "";
     public string PlaceIdText
@@ -165,6 +226,7 @@ public class AccountsViewModel : ObservableObject
     // Commands
     public AsyncRelayCommand AddCommand { get; }
     public AsyncRelayCommand ImportCommand { get; }
+    public AsyncRelayCommand ImportIc3w0lfCommand { get; }
     public RelayCommand RemoveCommand { get; }
     public AsyncRelayCommand LaunchCommand { get; }
     public AsyncRelayCommand JoinServerCommand { get; }
@@ -181,6 +243,14 @@ public class AccountsViewModel : ObservableObject
     public RelayCommand SavePlaceCommand { get; }
     public RelayCommand RemovePlaceCommand { get; }
     public RelayCommand ApplySavedPlaceCommand { get; }
+    public RelayCommand SetColorCommand { get; }
+    public RelayCommand ClearColorCommand { get; }
+    public RelayCommand ExportCommand { get; }
+    public RelayCommand FindDuplicatesCommand { get; }
+    public AsyncRelayCommand PingJoinCommand { get; }
+    public AsyncRelayCommand ServerHopCommand { get; }
+    public AsyncRelayCommand SquadJoinCommand { get; }
+    public AsyncRelayCommand InjectScriptCommand { get; }
 
     public AccountsViewModel(AccountStore store, MainViewModel main)
     {
@@ -191,6 +261,7 @@ public class AccountsViewModel : ObservableObject
 
         AddCommand = new AsyncRelayCommand(AddAsync);
         ImportCommand = new AsyncRelayCommand(ImportAsync);
+        ImportIc3w0lfCommand = new AsyncRelayCommand(ImportIc3w0lfAsync);
         RemoveCommand = new RelayCommand(p => Remove(p as IList));
         LaunchCommand = new AsyncRelayCommand(p => LaunchAsync(p as IList));
         JoinServerCommand = new AsyncRelayCommand(p => JoinServerAsync(p as IList));
@@ -207,6 +278,14 @@ public class AccountsViewModel : ObservableObject
         SavePlaceCommand = new RelayCommand(_ => SavePlace());
         RemovePlaceCommand = new RelayCommand(p => RemovePlace(p as SavedPlace));
         ApplySavedPlaceCommand = new RelayCommand(p => ApplySavedPlace(p as SavedPlace));
+        SetColorCommand = new RelayCommand(p => SetColor(p as string));
+        ClearColorCommand = new RelayCommand(_ => SetColor(""));
+        ExportCommand = new RelayCommand(_ => Export());
+        FindDuplicatesCommand = new RelayCommand(_ => FindDuplicates());
+        PingJoinCommand = new AsyncRelayCommand(p => PingJoinAsync(p as IList));
+        ServerHopCommand = new AsyncRelayCommand(p => ServerHopAsync(p as IList));
+        SquadJoinCommand = new AsyncRelayCommand(p => SquadJoinAsync(p as IList));
+        InjectScriptCommand = new AsyncRelayCommand(p => InjectScriptAsync(p as IList));
 
         _ = LoadSavedPlaceIconsAsync();   // warm up saved-place icons in the background
     }
@@ -237,6 +316,47 @@ public class AccountsViewModel : ObservableObject
         }
 
         _main.SetStatus(r.Message);
+    }
+
+    // #29 Inject: run a JS snippet in each selected account's authenticated CloakBrowser session.
+    private async Task InjectScriptAsync(IList? list)
+    {
+        var sel = Sel(list);
+        if (sel.Count == 0) { _main.SetStatus("Select at least one account."); return; }
+
+        var js = DialogService.Prompt("Inject script",
+            "JavaScript to run in each account's logged-in browser (e.g. a bookmarklet one-liner):");
+        if (string.IsNullOrWhiteSpace(js)) return;
+
+        Busy = true;
+        int ok = 0, fail = 0;
+        bool chromiumOffered = false;
+        foreach (var acc in sel)
+        {
+            _main.SetStatus($"Injecting into {acc.DisplayNameOrUser}…");
+            var r = await BrowserService.OpenLoggedInAsync(acc, js);
+
+            if (!r.Success && r.Message == "no-chromium")
+            {
+                if (chromiumOffered) { fail++; continue; }   // only ask once per batch
+                chromiumOffered = true;
+                Busy = false;
+                if (DialogService.Confirm("Chromium required",
+                    "Injecting a script uses a private, portable Chromium (downloaded once, ~330 MB, kept separate from your normal browser). Download it now?")
+                    && DialogService.ShowChromiumDownload())
+                {
+                    Busy = true;
+                    r = await BrowserService.OpenLoggedInAsync(acc, js);
+                }
+                else { _main.SetStatus("Injection cancelled — Chromium is required."); return; }
+            }
+
+            if (r.Success) ok++; else fail++;
+        }
+        Busy = false;
+        _main.SetStatus(fail == 0
+            ? $"Injected the script into {ok} account(s)."
+            : $"Injected into {ok} account(s); {fail} failed.");
     }
 
     private async Task OpenAppAsync()
@@ -282,6 +402,37 @@ public class AccountsViewModel : ObservableObject
         await _store.RefreshLiveDataAsync();
     }
 
+    /// <summary>
+    /// Imports from ic3w0lf's "Roblox Account Manager". Auto-detects its data
+    /// file where possible; otherwise the user browses to it. The file is read
+    /// tolerantly and every visible cookie is validated with Roblox before it's
+    /// added. Encrypted (master-password) stores yield no cookies — we say so and
+    /// point the user at ic3w0lf's Export feature rather than guessing.
+    /// </summary>
+    private async Task ImportIc3w0lfAsync()
+    {
+        var auto = Ic3w0lfImportService.AutoLocate();
+        var path = DialogService.PickFile(
+            "Import from ic3w0lf's Roblox Account Manager",
+            "ic3w0lf account data|AccountData;AccountData.json;accounts.json|All files|*.*",
+            auto);
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var read = Ic3w0lfImportService.ReadFile(path);
+        if (!read.Ok)
+        {
+            DialogService.Info("Nothing imported", read.Message);
+            return;
+        }
+
+        _main.SetStatus(read.Message);
+        Busy = true;
+        var (added, failed) = await _store.ImportManyAsync(read.Text, s => _main.SetStatus(s));
+        Busy = false;
+        _main.SetStatus($"ic3w0lf import complete — {added} added, {failed} failed.");
+        await _store.RefreshLiveDataAsync();
+    }
+
     private void Remove(IList? list)
     {
         var sel = Sel(list);
@@ -291,6 +442,54 @@ public class AccountsViewModel : ObservableObject
             return;
         foreach (var a in sel) _store.Remove(a);
         _main.SetStatus($"Removed {names}.");
+    }
+
+    // ==== #29 Power-Tools: server-selection launches ====
+    private string? _lastHopJobId;   // remembered so the next hop lands somewhere new
+
+    // Ping-Join: launch the selection into the lowest-ping public server for the place.
+    private async Task PingJoinAsync(IList? list)
+    {
+        var sel = Sel(list);
+        if (sel.Count == 0) { _main.SetStatus("Select at least one account."); return; }
+        if (!TryPlaceId(out long placeId)) return;
+        _main.SetStatus("Finding the lowest-ping server…");
+        var pick = await PowerToolsService.PickBestPingAsync(placeId);
+        if (pick.JobId == null) { _main.SetStatus(pick.Error ?? "No joinable server found."); return; }
+        _main.SetStatus(pick.Server!.Ping > 0
+            ? $"Best server: {pick.Server.Ping} ms · {pick.Server.Playing}/{pick.Server.MaxPlayers} players — launching…"
+            : $"Ping unavailable — joining emptiest server ({pick.Server.Playing}/{pick.Server.MaxPlayers})…");
+        _lastHopJobId = pick.JobId;
+        await LaunchSequential(sel, placeId, pick.JobId, 0);
+    }
+
+    // Server-Hop: launch the selection into a fresh random server, different from the last hop.
+    private async Task ServerHopAsync(IList? list)
+    {
+        var sel = Sel(list);
+        if (sel.Count == 0) { _main.SetStatus("Select at least one account."); return; }
+        if (!TryPlaceId(out long placeId)) return;
+        _main.SetStatus("Hopping to a fresh server…");
+        var pick = await PowerToolsService.PickHopAsync(placeId, _lastHopJobId);
+        if (pick.JobId == null) { _main.SetStatus(pick.Error ?? "No joinable server found."); return; }
+        _lastHopJobId = pick.JobId;
+        _main.SetStatus($"Hopping into a {pick.Server!.Playing}/{pick.Server.MaxPlayers} server…");
+        await LaunchSequential(sel, placeId, pick.JobId, 0);
+    }
+
+    // Squad: land the whole checked/selected group in one server that has room for everyone.
+    private async Task SquadJoinAsync(IList? list)
+    {
+        var sel = Sel(list);
+        if (sel.Count == 0) { _main.SetStatus("Check or select the squad first."); return; }
+        if (!TryPlaceId(out long placeId)) return;
+        _main.SetStatus($"Finding a server with room for {sel.Count}…");
+        var pick = await PowerToolsService.PickSquadAsync(placeId, sel.Count);
+        if (pick.JobId == null) { _main.SetStatus(pick.Error ?? "No joinable server found."); return; }
+        if (pick.Warning != null) _main.SetStatus(pick.Warning);
+        else _main.SetStatus($"Squad server: {pick.Server!.Playing}/{pick.Server.MaxPlayers} — launching {sel.Count} together…");
+        _lastHopJobId = pick.JobId;
+        await LaunchSequential(sel, placeId, pick.JobId, 0);
     }
 
     private bool TryPlaceId(out long placeId)

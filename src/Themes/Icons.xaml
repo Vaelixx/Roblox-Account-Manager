@@ -31,5 +31,6 @@
     <Geometry x:Key="Icon.Dot">M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z</Geometry>
     <Geometry x:Key="Icon.External">M14 4h6v6M20 4l-9 9M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5</Geometry>
     <Geometry x:Key="Icon.Bookmark">M8 4.5h8A1.5 1.5 0 0 1 17.5 6v13.5L12 16.3l-5.5 3.2V6A1.5 1.5 0 0 1 8 4.5z</Geometry>
+    <Geometry x:Key="Icon.Activity">M3 12h5l2-5 3 10 2-5h6</Geometry>
 
 </ResourceDictionary>

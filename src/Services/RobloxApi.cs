@@ -85,11 +85,31 @@ public static class RobloxApi
         => (await GetAuthTicketDetailedAsync(cookie)).ticket;
 
     /// <summary>
+    /// Roblox occasionally rotates the .ROBLOSECURITY cookie and hands back the new value in a
+    /// Set-Cookie header. Returns that value only when it is a genuine token (carries the WARNING
+    /// prefix) that differs from <paramref name="current"/>; deletion/placeholder cookies are ignored.
+    /// </summary>
+    private static string? ExtractRotatedCookie(HttpResponseMessage resp, string current)
+    {
+        if (!resp.Headers.TryGetValues("set-cookie", out var cookies)) return null;
+        foreach (var raw in cookies)
+        {
+            var m = Regex.Match(raw, @"\.ROBLOSECURITY=([^;]+)");
+            if (!m.Success) continue;
+            string val = m.Groups[1].Value.Trim();
+            if (string.IsNullOrEmpty(val) || !val.Contains("WARNING")) continue; // ignore deletes
+            return val == current ? null : val;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Robust auth-ticket fetch. The ticket endpoint doubles as the CSRF source: an unauthenticated
     /// POST returns 403 + a fresh x-csrf-token, which we then replay. We retry on token rotation so a
-    /// stale CSRF never surfaces as a false "expired cookie".
+    /// stale CSRF never surfaces as a false "expired cookie". Also surfaces a rotated .ROBLOSECURITY
+    /// (<c>rotatedCookie</c>) when Roblox issues one, so the caller can persist it.
     /// </summary>
-    public static async Task<(string? ticket, string error)> GetAuthTicketDetailedAsync(string cookie)
+    public static async Task<(string? ticket, string? rotatedCookie, string error)> GetAuthTicketDetailedAsync(string cookie)
     {
         string? csrf = await GetCsrfTokenAsync(cookie);
         string lastError = "no response";
@@ -112,7 +132,7 @@ public static class RobloxApi
                 if (resp.Headers.TryGetValues("rbx-authentication-ticket", out var t))
                 {
                     string? ticket = t.FirstOrDefault();
-                    if (!string.IsNullOrEmpty(ticket)) return (ticket, "");
+                    if (!string.IsNullOrEmpty(ticket)) return (ticket, ExtractRotatedCookie(resp, cookie), "");
                 }
 
                 // CSRF rotated? grab the fresh token and replay.
@@ -130,7 +150,7 @@ public static class RobloxApi
             catch (Exception ex) { lastError = ex.Message; }
         }
 
-        return (null, lastError);
+        return (null, null, lastError);
     }
 
     // ---------------------------------------------------------------
@@ -146,6 +166,55 @@ public static class RobloxApi
             return doc.RootElement.GetProperty("robux").GetInt64();
         }
         catch { return -1; }
+    }
+
+    /// <summary>
+    /// Sums the recent-average-price of every collectible the user owns (their "RAP").
+    /// Paginates the inventory endpoint, capped at 10 pages (1000 items) so a whale
+    /// account can't stall the refresh. Returns (-1, 0) when the inventory is private
+    /// or the request fails.
+    /// </summary>
+    public static async Task<(long rap, int count)> GetCollectiblesRapAsync(string cookie, long userId)
+    {
+        long rap = 0; int count = 0;
+        try
+        {
+            string cursor = "";
+            for (int page = 0; page < 10; page++)
+            {
+                string url = $"https://inventory.roblox.com/v1/users/{userId}/assets/collectibles?limit=100&sortOrder=Asc";
+                if (!string.IsNullOrEmpty(cursor)) url += $"&cursor={Uri.EscapeDataString(cursor)}";
+                var resp = await Http.SendAsync(Build(HttpMethod.Get, url, cookie));
+                if (!resp.IsSuccessStatusCode) { if (page == 0) return (-1, 0); break; }
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                var root = doc.RootElement;
+                if (root.TryGetProperty("data", out var data))
+                    foreach (var item in data.EnumerateArray())
+                    {
+                        if (item.TryGetProperty("recentAveragePrice", out var rp) && rp.ValueKind == JsonValueKind.Number)
+                            rap += rp.GetInt64();
+                        count++;
+                    }
+                cursor = root.TryGetProperty("nextPageCursor", out var nc) && nc.ValueKind == JsonValueKind.String ? nc.GetString() ?? "" : "";
+                if (string.IsNullOrEmpty(cursor)) break;
+            }
+            return (rap, count);
+        }
+        catch { return (-1, 0); }
+    }
+
+    /// <summary>True when the account currently holds a Roblox Premium membership.</summary>
+    public static async Task<bool> GetPremiumAsync(string cookie, long userId)
+    {
+        try
+        {
+            var resp = await Http.SendAsync(Build(HttpMethod.Get,
+                $"https://premiumfeatures.roblox.com/v1/users/{userId}/validate-membership", cookie));
+            if (!resp.IsSuccessStatusCode) return false;
+            var body = (await resp.Content.ReadAsStringAsync()).Trim();
+            return body.Equals("true", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
     }
 
     // ---------------------------------------------------------------

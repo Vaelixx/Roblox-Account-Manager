@@ -34,6 +34,13 @@ public partial class App : Application
         _instanceMutex = new Mutex(true, "RobloxAccountManager.Modern.SingleInstance", out bool isNew);
         if (!isNew)
         {
+            // Already running. If we were started to perform an action (e.g. --launch),
+            // forward it to the live instance and exit quietly; otherwise just surface it.
+            if (CliService.HasActionableArgs(e.Args) && SingleInstanceService.TrySendToPrimary(e.Args))
+            {
+                Shutdown();
+                return;
+            }
             MessageBox.Show("Roblox Account Manager is already running.", "Roblox Account Manager",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
@@ -44,6 +51,8 @@ public partial class App : Application
         base.OnStartup(e);
 
         SettingsService.Load();
+        ThemeService.Apply(SettingsService.Current);   // paint the saved palette before the window shows
+        LocalizationService.Apply(SettingsService.Current.Language);  // publish Str.* for the chosen language
 
         var vm = new MainViewModel();
         if (!LoadAccounts(vm.Store))
@@ -56,8 +65,97 @@ public partial class App : Application
         MainWindow = window;
         window.Show();
 
+        WireBackgroundServices(vm);
+
+        // Listen for CLI requests forwarded by later instances (e.g. `RAM.exe --launch …`).
+        SingleInstanceService.StartServer(a => _ = CliService.HandleAsync(vm, a));
+
+        // Honour a CLI launch that started *this* (primary) instance, now that accounts are ready.
+        if (CliService.HasActionableArgs(e.Args))
+            _ = CliService.HandleAsync(vm, e.Args);
+
         if (updateTempDir != null)
             _ = Task.Run(() => CleanupUpdateDirAsync(updateTempDir));
+    }
+
+    /// <summary>
+    /// Starts the background engines (crash watchdog, anti-AFK) and runs an optional
+    /// startup cookie-health sweep. Called once the main window is up so status updates
+    /// have somewhere to land.
+    /// </summary>
+    private static void WireBackgroundServices(MainViewModel vm)
+    {
+        WatchdogService.Init(userId => vm.Store.Accounts.FirstOrDefault(a => a.UserId == userId));
+        WatchdogService.Apply();
+        AntiAfkService.Apply();
+
+        // Scheduler resolves a task's stored account by alias first, then username,
+        // so renaming the display name never breaks a saved schedule.
+        SchedulerService.Init(key => vm.Store.Accounts.FirstOrDefault(a =>
+            string.Equals(a.Alias,    key, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a.Username, key, StringComparison.OrdinalIgnoreCase)));
+        SchedulerService.Start();
+
+        RamMonitorService.Apply();
+
+        // Local control server snapshots the live account collection per request.
+        WebApiService.Init(() => vm.Store.Accounts.ToList());
+        WebApiService.Apply();
+
+        // Third-party plugins: give the host a live account snapshot, then load DLLs
+        // from the plugins folder. A throwing plugin is isolated inside the loader.
+        PluginService.Init(() => vm.Store.Accounts.ToList());
+        PluginService.Load();
+
+        // Launcher shares the store so a .ROBLOSECURITY rotated by Roblox during the
+        // auth-ticket call can be written back to the account and persisted to disk.
+        LauncherService.Init(vm.Store);
+
+        // Live dashboard: poll presence on a short background cadence so the status
+        // counters stay current without the heavier thumbnail/robux refresh path.
+        PresenceService.Init(vm.Store);
+        PresenceService.Start();
+
+        if (SettingsService.Current.ValidateCookiesOnStartup)
+            _ = CookieHealthService.ValidateAllAsync(vm.Store.Accounts.ToList());
+
+        // Global hotkeys: each enabled chord fires a named power-tool action. The
+        // dispatch runs on the UI thread (the hotkey window rides the WPF pump), so
+        // touching the view-model here is safe.
+        HotkeyService.Init(action => DispatchHotkey(vm, action));
+        HotkeyService.Apply();
+    }
+
+    /// <summary>Routes a global-hotkey action id to the matching power-tool.</summary>
+    private static void DispatchHotkey(MainViewModel vm, string action)
+    {
+        switch (action)
+        {
+            case "LaunchSelected":
+                vm.Accounts.LaunchCommand.Execute(null);
+                break;
+
+            case "ServerHopSelected":
+                vm.Accounts.ServerHopCommand.Execute(null);
+                break;
+
+            case "CloseAllRoblox":
+                int n = LauncherService.CloseAllClients();
+                vm.SetStatus(n > 0 ? $"Closed {n} Roblox client(s)." : "No Roblox clients were running.");
+                break;
+
+            case "FocusManager":
+                if (Current?.MainWindow is { } w)
+                {
+                    if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
+                    w.Show();
+                    w.Activate();
+                    w.Topmost = true;   // nudge past other windows…
+                    w.Topmost = false;  // …without actually pinning it there
+                    w.Focus();
+                }
+                break;
+        }
     }
 
     /// <summary>Best-effort removal of the %TEMP% updater folder left behind by --apply-update.</summary>
@@ -124,6 +222,15 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        SingleInstanceService.StopServer();
+        AntiAfkService.Stop();
+        WatchdogService.Stop();
+        SchedulerService.Stop();
+        RamMonitorService.Stop();
+        WebApiService.Stop();
+        PresenceService.Stop();
+        HotkeyService.Stop();
+        PluginService.Unload(); // let plugins release timers/sockets (may still Close() clients)
         LauncherService.ReleaseMultiInstance();
         base.OnExit(e);
     }

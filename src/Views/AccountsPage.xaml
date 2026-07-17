@@ -61,6 +61,107 @@
                 </Setter.Value>
             </Setter>
         </Style>
+                                <DataTemplate x:Key="AccountCardTemplate" DataType="{x:Type models:Account}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Multi-select tick -->
+                                        <CheckBox Grid.Column="0" Style="{StaticResource SelectCheck}"
+                                                  VerticalAlignment="Center" Margin="0,0,10,0"
+                                                  IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <!-- Avatar -->
+                                        <Grid Grid.Column="1" Width="42" Height="42">
+                                            <Border CornerRadius="11" Background="{DynamicResource SurfaceAltBrush}"
+                                                    BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1" />
+                                            <TextBlock Text="{Binding Initials}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <Border CornerRadius="11" ClipToBounds="True">
+                                                <Image Source="{Binding ThumbnailUrl, Converter={StaticResource UrlToImage}}"
+                                                       Stretch="UniformToFill" />
+                                            </Border>
+                                            <Ellipse Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                     Margin="0,0,-2,-2" Fill="{Binding PresenceColor, Converter={StaticResource HexToBrush}}"
+                                                     Stroke="{DynamicResource SurfaceBrush}" StrokeThickness="2" />
+                                            <!-- Colour tag (#28): mirrors the presence dot, top-left -->
+                                            <Ellipse Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                     Margin="-2,-2,0,0" Fill="{Binding Color, Converter={StaticResource HexToBrush}}"
+                                                     Stroke="{DynamicResource SurfaceBrush}" StrokeThickness="2"
+                                                     Visibility="{Binding HasColor, Converter={StaticResource BoolToVis}}" />
+                                        </Grid>
+
+                                        <!-- Name / meta -->
+                                        <StackPanel Grid.Column="2" Margin="13,0" VerticalAlignment="Center">
+                                            <TextBlock FontWeight="SemiBold" FontSize="13.5" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}">
+                                                <TextBlock.Text>
+                                                    <MultiBinding Converter="{StaticResource MaskConverter}">
+                                                        <Binding Path="DisplayNameOrUser" />
+                                                        <Binding Path="DataContext.MaskUsernames" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                <TextBlock Text="{Binding Presence}" FontSize="11"
+                                                           Foreground="{Binding PresenceColor, Converter={StaticResource HexToBrush}}" />
+                                                <TextBlock Text="•" FontSize="11" Margin="6,0" Foreground="{DynamicResource TextMutedBrush}" />
+                                                <Path Data="{StaticResource Icon.Robux}" Stroke="{DynamicResource TextMutedBrush}"
+                                                      StrokeThickness="1.5" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding RobuxDisplay}" FontSize="11" Margin="4,0,0,0"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                <TextBlock Text="{Binding Username, StringFormat='@{0}'}" FontSize="11" Margin="8,0,0,0"
+                                                           Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis"
+                                                           Visibility="{Binding Alias, Converter={StaticResource NullToVis}}" />
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Description}" FontSize="11.5" Margin="0,4,0,0"
+                                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       Visibility="{Binding Description, Converter={StaticResource NullToVis}}" />
+                                        </StackPanel>
+
+                                        <Border Grid.Column="3" VerticalAlignment="Center" CornerRadius="6" Padding="7,3"
+                                                Background="{DynamicResource DangerSoftBrush}"
+                                                Visibility="{Binding IsValid, Converter={StaticResource InverseBoolToVis}}">
+                                            <TextBlock Text="expired" FontSize="10" Foreground="{DynamicResource DangerBrush}" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                        <DataTemplate x:Key="AccountCompactTemplate" DataType="{x:Type models:Account}">
+                            <Border CornerRadius="6" Background="{DynamicResource SurfaceAltBrush}" Padding="6,2" Margin="0,1,0,1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" VerticalAlignment="Center" Style="{StaticResource SelectCheck}"
+                                              IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Border Grid.Column="1" Width="20" Height="20" CornerRadius="10" ClipToBounds="True" Margin="6,0,0,0"
+                                            Background="{DynamicResource SurfaceBrush}">
+                                        <Image Source="{Binding ThumbnailUrl, Converter={StaticResource UrlToImage}}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12"
+                                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextPrimaryBrush}">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{StaticResource MaskConverter}">
+                                                <Binding Path="DisplayNameOrUser" />
+                                                <Binding Path="DataContext.MaskUsernames" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock Grid.Column="3" Text="{Binding RobuxDisplay}" Margin="8,0,0,0" VerticalAlignment="Center"
+                                               FontSize="11" Foreground="{DynamicResource TextMutedBrush}" />
+                                    <Ellipse Grid.Column="4" Width="8" Height="8" Margin="8,0,4,0" VerticalAlignment="Center"
+                                             Fill="{Binding PresenceColor, Converter={StaticResource HexToBrush}}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
     </UserControl.Resources>
 
     <Grid Margin="30,8,30,26">
@@ -92,6 +193,90 @@
                 <Button Style="{StaticResource IconButton}" Command="{Binding RefreshAllCommand}" ToolTip="Refresh data" Margin="0,0,8,0">
                     <Path Data="{StaticResource Icon.Refresh}" Style="{StaticResource IconPath}" />
                 </Button>
+
+                <!-- ==== #28 Colour-tag palette: applies to checked accounts (or the selected one) ==== -->
+                <ToggleButton x:Name="ColourToggle" Margin="0,0,8,0" Cursor="Hand"
+                              ToolTip="Colour-tag checked / selected accounts">
+                    <ToggleButton.Template>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border x:Name="bd" Width="40" Height="40" CornerRadius="10" Background="Transparent">
+                                <Path Data="{StaticResource Icon.Bookmark}" Style="{StaticResource IconPath}"
+                                      Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </ToggleButton.Template>
+                </ToggleButton>
+                <Popup PlacementTarget="{Binding ElementName=ColourToggle}" Placement="Bottom" HorizontalOffset="-4"
+                       StaysOpen="False" AllowsTransparency="True"
+                       IsOpen="{Binding IsChecked, ElementName=ColourToggle, Mode=TwoWay}">
+                    <Border Margin="6" Padding="8" CornerRadius="12"
+                            Background="{DynamicResource ElevatedBrush}"
+                            BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Command="{Binding SetColorCommand}" CommandParameter="#FF5C5C" ToolTip="Red" Width="24" Height="24" Margin="3,0" Cursor="Hand">
+                                <Button.Template><ControlTemplate TargetType="Button">
+                                    <Ellipse Width="20" Height="20" Fill="#FF5C5C" Stroke="{DynamicResource HairlineStrongBrush}" StrokeThickness="1" />
+                                </ControlTemplate></Button.Template>
+                            </Button>
+                            <Button Command="{Binding SetColorCommand}" CommandParameter="#FF9F40" ToolTip="Orange" Width="24" Height="24" Margin="3,0" Cursor="Hand">
+                                <Button.Template><ControlTemplate TargetType="Button">
+                                    <Ellipse Width="20" Height="20" Fill="#FF9F40" Stroke="{DynamicResource HairlineStrongBrush}" StrokeThickness="1" />
+                                </ControlTemplate></Button.Template>
+                            </Button>
+                            <Button Command="{Binding SetColorCommand}" CommandParameter="#F5C518" ToolTip="Gold" Width="24" Height="24" Margin="3,0" Cursor="Hand">
+                                <Button.Template><ControlTemplate TargetType="Button">
+                                    <Ellipse Width="20" Height="20" Fill="#F5C518" Stroke="{DynamicResource HairlineStrongBrush}" StrokeThickness="1" />
+                                </ControlTemplate></Button.Template>
+                            </Button>
+                            <Button Command="{Binding SetColorCommand}" CommandParameter="#4CD07D" ToolTip="Green" Width="24" Height="24" Margin="3,0" Cursor="Hand">
+                                <Button.Template><ControlTemplate TargetType="Button">
+                                    <Ellipse Width="20" Height="20" Fill="#4CD07D" Stroke="{DynamicResource HairlineStrongBrush}" StrokeThickness="1" />
+                                </ControlTemplate></Button.Template>
+                            </Button>
+                            <Button Command="{Binding SetColorCommand}" CommandParameter="#4C9AFF" ToolTip="Blue" Width="24" Height="24" Margin="3,0" Cursor="Hand">
+                                <Button.Template><ControlTemplate TargetType="Button">
+                                    <Ellipse Width="20" Height="20" Fill="#4C9AFF" Stroke="{DynamicResource HairlineStrongBrush}" StrokeThickness="1" />
+                                </ControlTemplate></Button.Template>
+                            </Button>
+                            <Button Command="{Binding SetColorCommand}" CommandParameter="#B57BFF" ToolTip="Purple" Width="24" Height="24" Margin="3,0" Cursor="Hand">
+                                <Button.Template><ControlTemplate TargetType="Button">
+                                    <Ellipse Width="20" Height="20" Fill="#B57BFF" Stroke="{DynamicResource HairlineStrongBrush}" StrokeThickness="1" />
+                                </ControlTemplate></Button.Template>
+                            </Button>
+                            <Border Width="1" Margin="6,2" Background="{DynamicResource HairlineStrongBrush}" />
+                            <Button Command="{Binding ClearColorCommand}" ToolTip="Clear colour" Width="24" Height="24" Margin="3,0" Cursor="Hand">
+                                <Button.Template><ControlTemplate TargetType="Button">
+                                    <Border x:Name="cb" CornerRadius="12" Background="{DynamicResource SurfaceAltBrush}"
+                                            BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1">
+                                        <Path Data="{StaticResource Icon.Close}" Style="{StaticResource IconPath}"
+                                              Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="cb" Property="Background" Value="{DynamicResource DangerBrush}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate></Button.Template>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <Button Style="{StaticResource IconButton}" Command="{Binding FindDuplicatesCommand}" ToolTip="Find duplicate accounts (same username / user-id)" Margin="0,0,8,0">
+                    <Path Data="{StaticResource Icon.Copy}" Style="{StaticResource IconPath}" />
+                </Button>
+                <Button Style="{StaticResource IconButton}" Command="{Binding ExportCommand}" ToolTip="Export accounts (checked, or all) to CSV / JSON" Margin="0,0,10,0">
+                    <Path Data="{StaticResource Icon.External}" Style="{StaticResource IconPath}" />
+                </Button>
+
                 <Button Style="{StaticResource GhostButton}" Command="{Binding ImportCommand}" Height="40" Margin="0,0,10,0">
                     <StackPanel Orientation="Horizontal">
                         <Path Data="{StaticResource Icon.Import}" Style="{StaticResource IconPath}" Width="16" Height="16" />
@@ -150,7 +335,10 @@
                                   SelectedItem="{Binding Selected, Mode=TwoWay}"
                                   SelectionMode="Extended" Background="Transparent" BorderThickness="0"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                  ScrollViewer.VerticalScrollBarVisibility="Auto" Padding="8">
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto" Padding="8"
+                                  AllowDrop="True" Drop="AccountsList_Drop"
+                                  PreviewMouseLeftButtonDown="AccountsList_PreviewMouseLeftButtonDown"
+                                  PreviewMouseMove="AccountsList_PreviewMouseMove">
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem">
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -178,72 +366,16 @@
                                 </Style>
                             </ListView.ItemContainerStyle>
 
-                            <ListView.ItemTemplate>
-                                <DataTemplate DataType="{x:Type models:Account}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- Multi-select tick -->
-                                        <CheckBox Grid.Column="0" Style="{StaticResource SelectCheck}"
-                                                  VerticalAlignment="Center" Margin="0,0,10,0"
-                                                  IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-                                        <!-- Avatar -->
-                                        <Grid Grid.Column="1" Width="42" Height="42">
-                                            <Border CornerRadius="11" Background="{DynamicResource SurfaceAltBrush}"
-                                                    BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1" />
-                                            <TextBlock Text="{Binding Initials}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                       FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
-                                            <Border CornerRadius="11" ClipToBounds="True">
-                                                <Image Source="{Binding ThumbnailUrl, Converter={StaticResource UrlToImage}}"
-                                                       Stretch="UniformToFill" />
-                                            </Border>
-                                            <Ellipse Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                                     Margin="0,0,-2,-2" Fill="{Binding PresenceColor, Converter={StaticResource HexToBrush}}"
-                                                     Stroke="{DynamicResource SurfaceBrush}" StrokeThickness="2" />
-                                        </Grid>
-
-                                        <!-- Name / meta -->
-                                        <StackPanel Grid.Column="2" Margin="13,0" VerticalAlignment="Center">
-                                            <TextBlock FontWeight="SemiBold" FontSize="13.5" TextTrimming="CharacterEllipsis"
-                                                       Foreground="{DynamicResource TextPrimaryBrush}">
-                                                <TextBlock.Text>
-                                                    <MultiBinding Converter="{StaticResource MaskConverter}">
-                                                        <Binding Path="DisplayNameOrUser" />
-                                                        <Binding Path="DataContext.MaskUsernames" RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                                    </MultiBinding>
-                                                </TextBlock.Text>
-                                            </TextBlock>
-                                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                                <TextBlock Text="{Binding Presence}" FontSize="11"
-                                                           Foreground="{Binding PresenceColor, Converter={StaticResource HexToBrush}}" />
-                                                <TextBlock Text="•" FontSize="11" Margin="6,0" Foreground="{DynamicResource TextMutedBrush}" />
-                                                <Path Data="{StaticResource Icon.Robux}" Stroke="{DynamicResource TextMutedBrush}"
-                                                      StrokeThickness="1.5" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding RobuxDisplay}" FontSize="11" Margin="4,0,0,0"
-                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
-                                                <TextBlock Text="{Binding Username, StringFormat='@{0}'}" FontSize="11" Margin="8,0,0,0"
-                                                           Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis"
-                                                           Visibility="{Binding Alias, Converter={StaticResource NullToVis}}" />
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding Description}" FontSize="11.5" Margin="0,4,0,0"
-                                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       Visibility="{Binding Description, Converter={StaticResource NullToVis}}" />
-                                        </StackPanel>
-
-                                        <Border Grid.Column="3" VerticalAlignment="Center" CornerRadius="6" Padding="7,3"
-                                                Background="{DynamicResource DangerSoftBrush}"
-                                                Visibility="{Binding IsValid, Converter={StaticResource InverseBoolToVis}}">
-                                            <TextBlock Text="expired" FontSize="10" Foreground="{DynamicResource DangerBrush}" />
-                                        </Border>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
+                            <ListView.Style>
+                                <Style TargetType="ListView">
+                                    <Setter Property="ItemTemplate" Value="{StaticResource AccountCardTemplate}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompact}" Value="True">
+                                            <Setter Property="ItemTemplate" Value="{StaticResource AccountCompactTemplate}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListView.Style>
 
                             <ListView.GroupStyle>
                                 <GroupStyle>
@@ -387,6 +519,16 @@
                                         <TextBlock Text="View profile" Margin="8,0,0,0" />
                                     </StackPanel>
                                 </Button>
+                                <!-- #29 Inject: run a JS snippet in each selected account's logged-in browser -->
+                                <Button Style="{StaticResource GhostButton}" Margin="0,8,0,0" HorizontalAlignment="Stretch"
+                                        Command="{Binding InjectScriptCommand}"
+                                        CommandParameter="{Binding SelectedItems, ElementName=AccountsList}"
+                                        ToolTip="Run a JavaScript snippet in each selected account's signed-in browser">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Data="{StaticResource Icon.External}" Style="{StaticResource IconPath}" Width="15" Height="15" />
+                                        <TextBlock Text="Inject script" Margin="8,0,0,0" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Border>
 
@@ -519,6 +661,35 @@
                                         ToolTip="Join a random non-full public server">
                                     <TextBlock Text="Smart Join (random server)" />
                                 </Button>
+
+                                <!-- #29 Power-Tools: server-selection launches -->
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="6" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="6" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                                            Command="{Binding PingJoinCommand}"
+                                            CommandParameter="{Binding SelectedItems, ElementName=AccountsList}"
+                                            ToolTip="Join the lowest-ping public server for this place">
+                                        <TextBlock Text="Ping Join" HorizontalAlignment="Center" />
+                                    </Button>
+                                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                                            Command="{Binding ServerHopCommand}"
+                                            CommandParameter="{Binding SelectedItems, ElementName=AccountsList}"
+                                            ToolTip="Jump to a fresh random server, different from the last hop">
+                                        <TextBlock Text="Server Hop" HorizontalAlignment="Center" />
+                                    </Button>
+                                    <Button Grid.Column="4" Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                                            Command="{Binding SquadJoinCommand}"
+                                            CommandParameter="{Binding SelectedItems, ElementName=AccountsList}"
+                                            ToolTip="Land the whole selection in one server with room for everyone">
+                                        <TextBlock Text="Squad" HorizontalAlignment="Center" />
+                                    </Button>
+                                </Grid>
 
                                 <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="0,14" />
 

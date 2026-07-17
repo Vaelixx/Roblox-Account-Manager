@@ -16,8 +16,18 @@ public class Account : ObservableObject
     public string DisplayName { get; set; } = "";
     public string Group { get; set; } = "Default";
     public string BrowserTrackerId { get; set; } = "";
+    private string _color = "";
+    public string Color { get => _color; set { SetField(ref _color, value); OnPropertyChanged(nameof(HasColor)); } }  // optional tag colour (hex, e.g. #7B61FF)
+    [JsonIgnore] public bool HasColor => !string.IsNullOrEmpty(_color);
     public Dictionary<string, string> Fields { get; set; } = new();
     public DateTime LastUse { get; set; } = DateTime.Now;
+
+    public string TotpSecret { get; set; } = "";       // Base32 2FA secret (stored DPAPI-protected)
+    public string ProxyUrl { get; set; } = "";          // optional per-account proxy (http://host:port)
+    public string FFlags { get; set; } = "";            // per-account ClientAppSettings JSON (raw)
+
+    private bool _autoRejoin;
+    public bool AutoRejoin { get => _autoRejoin; set => SetField(ref _autoRejoin, value); }
 
     private string _alias = "";
     public string Alias
@@ -37,6 +47,13 @@ public class Account : ObservableObject
     private long _robux = -1;
     [JsonIgnore] public long Robux { get => _robux; set { SetField(ref _robux, value); OnPropertyChanged(nameof(RobuxDisplay)); } }
     [JsonIgnore] public string RobuxDisplay => _robux < 0 ? "—" : _robux.ToString("N0");
+
+    private long _rap = -1;
+    [JsonIgnore] public long Rap { get => _rap; set { SetField(ref _rap, value); OnPropertyChanged(nameof(RapDisplay)); } }
+    [JsonIgnore] public string RapDisplay => _rap < 0 ? "—" : _rap.ToString("N0");
+
+    private bool _isPremium;
+    [JsonIgnore] public bool IsPremium { get => _isPremium; set => SetField(ref _isPremium, value); }
 
     private string _presence = "Offline";
     [JsonIgnore] public string Presence { get => _presence; set { SetField(ref _presence, value); OnPropertyChanged(nameof(PresenceColor)); } }

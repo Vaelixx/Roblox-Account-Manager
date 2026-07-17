@@ -95,4 +95,44 @@ public static class DialogService
             okText: "Import");
         return dlg.ShowDialog() == true ? dlg.ResultText : null;
     }
+
+    /// <summary>
+    /// Native "open file" picker. Returns the chosen path, or <c>null</c> if the
+    /// user cancelled. <paramref name="initialPath"/> (if it exists) pre-selects
+    /// that file so an auto-located source is one click away.
+    /// </summary>
+    public static string? PickFile(string title, string filter = "All files|*.*", string? initialPath = null)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = title,
+            Filter = filter,
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (!string.IsNullOrWhiteSpace(initialPath) && System.IO.File.Exists(initialPath))
+        {
+            dlg.InitialDirectory = System.IO.Path.GetDirectoryName(initialPath);
+            dlg.FileName = System.IO.Path.GetFileName(initialPath);
+        }
+        return dlg.ShowDialog(Owner) == true ? dlg.FileName : null;
+    }
+
+    /// <summary>
+    /// Native "save file" picker. Returns the chosen path, or <c>null</c> if the
+    /// user cancelled. The extension the user keeps in the dialog decides the
+    /// export format (see <see cref="ScaleService"/>).
+    /// </summary>
+    public static string? SaveFile(string title, string filter, string defaultName)
+    {
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = title,
+            Filter = filter,
+            FileName = defaultName,
+            AddExtension = true,
+            OverwritePrompt = true,
+        };
+        return dlg.ShowDialog(Owner) == true ? dlg.FileName : null;
+    }
 }

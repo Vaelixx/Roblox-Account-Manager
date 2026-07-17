@@ -38,10 +38,49 @@ public static class SettingsService
     }
 }
 
-/// <summary>Central place for on-disk locations (next to the executable).</summary>
+/// <summary>
+/// Central place for on-disk locations. Data lives next to the executable (portable)
+/// when that folder is writable or a "portable.txt" marker is present; otherwise it
+/// falls back to %APPDATA%\RobloxAccountManager so installs under Program Files still work.
+/// </summary>
 public static class Paths
 {
     public static string BaseDir => AppContext.BaseDirectory;
-    public static string DataDir => System.IO.Path.Combine(BaseDir, "data");
+
+    private static string? _dataDir;
+    public static string DataDir => _dataDir ??= ResolveDataDir();
     public static string InData(string file) => System.IO.Path.Combine(DataDir, file);
+
+    public static bool IsPortable { get; private set; }
+
+    private static string ResolveDataDir()
+    {
+        string local = System.IO.Path.Combine(BaseDir, "data");
+
+        // Explicit portable marker, or an already-initialised local data folder -> stay local.
+        if (System.IO.File.Exists(System.IO.Path.Combine(BaseDir, "portable.txt"))
+            || System.IO.Directory.Exists(local))
+        {
+            IsPortable = true;
+            return local;
+        }
+
+        // Otherwise keep it local only if we can actually write there.
+        try
+        {
+            System.IO.Directory.CreateDirectory(local);
+            string probe = System.IO.Path.Combine(local, ".wtest");
+            System.IO.File.WriteAllText(probe, "");
+            System.IO.File.Delete(probe);
+            IsPortable = true;
+            return local;
+        }
+        catch
+        {
+            IsPortable = false;
+            return System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "RobloxAccountManager", "data");
+        }
+    }
 }

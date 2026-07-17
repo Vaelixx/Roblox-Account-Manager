@@ -14,6 +14,25 @@ public static class LauncherService
     // Remembers the last client we spawned per account so we can close it on relaunch.
     private static readonly Dictionary<long, int> _lastProcess = new();
 
+    // Shared store so a rotated .ROBLOSECURITY captured during launch can be persisted.
+    private static AccountStore? _store;
+    public static void Init(AccountStore store) => _store = store;
+
+    /// <summary>
+    /// Persist a rotated cookie surfaced by the auth-ticket call. No-op unless rotation
+    /// detection is enabled and the value actually changed. Updates the live account, saves
+    /// the store, and records the event in the audit log — the cookie value is never logged.
+    /// </summary>
+    private static void PersistRotatedCookie(Account acc, string? rotated)
+    {
+        if (string.IsNullOrEmpty(rotated) || rotated == acc.Cookie) return;
+        if (!SettingsService.Current.RotationDetectionEnabled) return;
+        acc.Cookie = rotated;
+        try { _store?.Save(); } catch { }
+        AuditLogService.Log(AuditLogService.Category.Rotation,
+            $"Cookie rotated for {acc.DisplayNameOrUser} (userId {acc.UserId})");
+    }
+
     public static void EnsureMultiInstance(bool enabled)
     {
         if (enabled && _multiMutex == null)
@@ -66,7 +85,7 @@ public static class LauncherService
 
         string tracker = EnsureTrackerId(acc);
 
-        var (ticket, error) = await RobloxApi.GetAuthTicketDetailedAsync(acc.Cookie);
+        var (ticket, rotated, error) = await RobloxApi.GetAuthTicketDetailedAsync(acc.Cookie);
         if (string.IsNullOrEmpty(ticket))
         {
             // Distinguish a genuinely dead cookie from a transient ticket failure.
@@ -81,6 +100,7 @@ public static class LauncherService
             return LaunchResult.Fail($"Couldn't get a launch ticket ({error}). Cookie is still valid — try again in a moment.");
         }
         acc.IsValid = true;
+        PersistRotatedCookie(acc, rotated);
 
         if (settings.AutoCloseLastProcess) CloseLast(acc);
 
@@ -127,13 +147,19 @@ public static class LauncherService
             Process.Start(psi);
             acc.LastUse = DateTime.Now;
 
-            // Give the protocol handler a moment, then remember the freshest client for this account.
+            // Give the protocol handler a moment, then remember the freshest client for this
+            // account — both for our own CloseLast bookkeeping and for the process registry that
+            // feeds Anti-AFK, the crash watchdog (needs place/job to re-join) and the RAM monitor.
             _ = Task.Run(async () =>
             {
                 await Task.Delay(4000);
                 RememberNewest(acc);
+                try { ProcessRegistry.RegisterNewest(acc, placeId, jobId); } catch { }
             });
 
+            try { PluginService.RaiseLaunched(acc, placeId, jobId); } catch { }
+            if (SettingsService.Current.ToastOnLaunch)
+                ToastService.Success("Launched", $"{acc.DisplayNameOrUser} is starting up.");
             return LaunchResult.Ok();
         }
         catch (Exception ex)
@@ -148,13 +174,14 @@ public static class LauncherService
         EnsureMultiInstance(SettingsService.Current.EnableMultiInstance);
         string tracker = EnsureTrackerId(acc);
 
-        var (ticket, error) = await RobloxApi.GetAuthTicketDetailedAsync(acc.Cookie);
+        var (ticket, rotated, error) = await RobloxApi.GetAuthTicketDetailedAsync(acc.Cookie);
         if (string.IsNullOrEmpty(ticket))
         {
             var identity = await RobloxApi.GetAuthenticatedUserAsync(acc.Cookie);
             if (identity == null) { acc.IsValid = false; return LaunchResult.Fail("This cookie is no longer valid — re-add the account."); }
             return LaunchResult.Fail($"Couldn't get a launch ticket ({error}). Try again in a moment.");
         }
+        PersistRotatedCookie(acc, rotated);
 
         long launchTime = (long)Math.Floor((DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds);
         string uri = "roblox-player:1+launchmode:app"
@@ -164,6 +191,8 @@ public static class LauncherService
         {
             Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
             acc.LastUse = DateTime.Now;
+            if (SettingsService.Current.ToastOnLaunch)
+                ToastService.Success("Launched", $"{acc.DisplayNameOrUser} is starting up.");
             return LaunchResult.Ok();
         }
         catch (Exception ex) { return LaunchResult.Fail($"Failed to open Roblox: {ex.Message}"); }
@@ -185,6 +214,33 @@ public static class LauncherService
             catch { }
             _lastProcess.Remove(acc.UserId);
         }
+    }
+
+    /// <summary>
+    /// Kills every running Roblox client and returns how many were closed. Used by the
+    /// global "Close all Roblox" hotkey; also clears the per-account "last process" map
+    /// so a later relaunch doesn't try to close an already-dead pid.
+    /// </summary>
+    public static int CloseAllClients()
+    {
+        int closed = 0;
+        var procs = Process.GetProcessesByName("RobloxPlayerBeta");
+        foreach (var p in procs)
+        {
+            try
+            {
+                if (!p.HasExited)
+                {
+                    p.CloseMainWindow();
+                    p.Kill();
+                    closed++;
+                }
+            }
+            catch { }
+            finally { p.Dispose(); }
+        }
+        _lastProcess.Clear();
+        return closed;
     }
 
     private static void RememberNewest(Account acc)

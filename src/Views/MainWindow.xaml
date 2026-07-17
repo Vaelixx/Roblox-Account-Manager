@@ -209,6 +209,10 @@
                                         Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=2}">
                         <views:SettingsPage.RenderTransform><TranslateTransform /></views:SettingsPage.RenderTransform>
                     </views:SettingsPage>
+                    <views:DashboardPage DataContext="{Binding Dashboard}" Style="{StaticResource PageTransition}"
+                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=3}">
+                        <views:DashboardPage.RenderTransform><TranslateTransform /></views:DashboardPage.RenderTransform>
+                    </views:DashboardPage>
                 </Grid>
             </Grid>
 
@@ -217,6 +221,65 @@
                 <Border Height="64" VerticalAlignment="Top" Background="{StaticResource TopGlowBrush}" Opacity="0.6" />
                 <Border Height="1.4" VerticalAlignment="Top" Background="{StaticResource TopSheenBrush}" />
             </Grid>
+
+            <!-- ==================== TOAST OVERLAY (#30) ==================== -->
+            <ItemsControl Grid.ColumnSpan="2" ItemsSource="{Binding Toasts}"
+                          VerticalAlignment="Top" HorizontalAlignment="Right"
+                          Margin="0,52,18,0" Width="340" Panel.ZIndex="99">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{DynamicResource ElevatedBrush}" CornerRadius="10"
+                                BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1"
+                                Margin="0,0,0,10" Effect="{StaticResource ShadowSoft}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="4" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <!-- accent bar keyed on the toast kind -->
+                                <Border Grid.Column="0" CornerRadius="10,0,0,10">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Kind}" Value="Success">
+                                                    <Setter Property="Background" Value="{DynamicResource SuccessBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind}" Value="Warning">
+                                                    <Setter Property="Background" Value="{DynamicResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind}" Value="Error">
+                                                    <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="14,11,8,11">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Message}" Style="{StaticResource Caption}"
+                                               Margin="0,3,0,0" TextWrapping="Wrap"
+                                               Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Style="{StaticResource GhostButton}"
+                                        Command="{Binding DismissCommand}" ToolTip="Dismiss"
+                                        VerticalAlignment="Top" HorizontalAlignment="Right"
+                                        Width="26" Height="26" Padding="0" Margin="0,6,6,0">
+                                    <Path Data="{StaticResource Icon.Close}" Style="{StaticResource IconPath}"
+                                          Width="11" Height="11" Stretch="Uniform" />
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </Grid>
     </Border>
 </Window>

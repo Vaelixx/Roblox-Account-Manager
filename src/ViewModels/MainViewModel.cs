@@ -7,12 +7,18 @@ namespace RobloxAccountManager.ViewModels;
 
 public class NavItem : ObservableObject
 {
-    public string Title { get; init; } = "";
+    /// <summary>Localization key (e.g. "Nav.Accounts"); the shown <see cref="Title"/>
+    /// is resolved live so a language switch relabels the rail without a rebuild.</summary>
+    public string TitleKey { get; init; } = "";
+    public string Title => LocalizationService.Get(TitleKey, LocalizationService.Current);
     public string IconKey { get; init; } = "";
     public int Index { get; init; }
 
     private bool _isActive;
     public bool IsActive { get => _isActive; set => SetField(ref _isActive, value); }
+
+    /// <summary>Re-reads <see cref="Title"/> after the active language changed.</summary>
+    public void RefreshTitle() => OnPropertyChanged(nameof(Title));
 }
 
 public class MainViewModel : ObservableObject
@@ -21,12 +27,17 @@ public class MainViewModel : ObservableObject
     public AccountsViewModel Accounts { get; }
     public ServerBrowserViewModel Servers { get; }
     public SettingsViewModel Settings { get; }
+    public DashboardViewModel Dashboard { get; }
+
+    /// <summary>In-app toast stack, surfaced by the main-window overlay (#30).</summary>
+    public ObservableCollection<ToastItem> Toasts => ToastService.Items;
 
     public ObservableCollection<NavItem> NavItems { get; } = new()
     {
-        new NavItem { Title = "Accounts", IconKey = "Icon.Accounts", Index = 0 },
-        new NavItem { Title = "Servers",  IconKey = "Icon.Servers",  Index = 1 },
-        new NavItem { Title = "Settings", IconKey = "Icon.Settings", Index = 2 },
+        new NavItem { TitleKey = "Nav.Accounts",  IconKey = "Icon.Accounts", Index = 0 },
+        new NavItem { TitleKey = "Nav.Servers",   IconKey = "Icon.Servers",  Index = 1 },
+        new NavItem { TitleKey = "Nav.Settings",  IconKey = "Icon.Settings", Index = 2 },
+        new NavItem { TitleKey = "Nav.Dashboard", IconKey = "Icon.Activity", Index = 3 },
     };
 
     private int _selectedIndex;
@@ -81,8 +92,16 @@ public class MainViewModel : ObservableObject
         Accounts = new AccountsViewModel(Store, this);
         Servers = new ServerBrowserViewModel(Store, this);
         Settings = new SettingsViewModel(this);
+        Dashboard = new DashboardViewModel(Store);
 
         NavItems[0].IsActive = true;
+
+        // A language switch relabels the rail live (Title resolves against the active code).
+        LocalizationService.Changed += () =>
+        {
+            foreach (var n in NavItems) n.RefreshTitle();
+            OnPropertyChanged(nameof(SelectedNav));
+        };
 
         UpdateNowCommand = new RelayCommand(UpdateNow, () => UpdateAvailable);
 
