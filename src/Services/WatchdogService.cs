@@ -54,13 +54,14 @@ public static class WatchdogService
         var s = SettingsService.Current;
         if (!s.WatchdogEnabled) return;
 
+        var acc = _accountLookup?.Invoke(t.UserId);
+
         if (s.NotifyOnCrash && WebhookService.Configured)
-            WebhookService.Notify($"⚠️ **{t.Alias}** closed/crashed (place {t.PlaceId}).");
+            WebhookService.Disconnected(t.Alias, acc?.ThumbnailUrl, t.PlaceId);
 
         if (s.ToastOnCrash)
             ToastService.Warning("Client closed", $"{t.Alias} closed or crashed (place {t.PlaceId}).");
 
-        var acc = _accountLookup?.Invoke(t.UserId);
         if (acc == null || !acc.AutoRejoin) return;
 
         // We treat this exit as a crash and are about to auto-rejoin: tell plugins first.
@@ -75,9 +76,10 @@ public static class WatchdogService
             await Task.Delay(3000); // let the crashed process fully die first
             var result = await LauncherService.LaunchAsync(acc, t.PlaceId, t.JobId);
             if (WebhookService.Configured)
-                WebhookService.Notify(result.Success
-                    ? $"🔁 Re-joined **{t.Alias}** into place {t.PlaceId}."
-                    : $"❌ Re-join failed for **{t.Alias}**: {result.Message}");
+            {
+                if (result.Success) WebhookService.Reconnected(acc, t.PlaceId, t.JobId);
+                else WebhookService.ReconnectFailed(t.Alias, acc.ThumbnailUrl, t.PlaceId, result.Message);
+            }
         }
         catch { }
     }

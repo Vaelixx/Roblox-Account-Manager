@@ -198,23 +198,23 @@
                 <!-- Pages -->
                 <Grid Grid.Row="1">
                     <views:AccountsPage DataContext="{Binding Accounts}" Style="{StaticResource PageTransition}"
-                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=0}">
+                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=1}">
                         <views:AccountsPage.RenderTransform><TranslateTransform /></views:AccountsPage.RenderTransform>
                     </views:AccountsPage>
                     <views:ServerBrowserPage DataContext="{Binding Servers}" Style="{StaticResource PageTransition}"
-                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=1}">
+                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=3}">
                         <views:ServerBrowserPage.RenderTransform><TranslateTransform /></views:ServerBrowserPage.RenderTransform>
                     </views:ServerBrowserPage>
                     <views:SettingsPage DataContext="{Binding Settings}" Style="{StaticResource PageTransition}"
-                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=2}">
+                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=4}">
                         <views:SettingsPage.RenderTransform><TranslateTransform /></views:SettingsPage.RenderTransform>
                     </views:SettingsPage>
                     <views:DashboardPage DataContext="{Binding Dashboard}" Style="{StaticResource PageTransition}"
-                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=3}">
+                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=0}">
                         <views:DashboardPage.RenderTransform><TranslateTransform /></views:DashboardPage.RenderTransform>
                     </views:DashboardPage>
                     <views:FriendsPage DataContext="{Binding Friends}" Style="{StaticResource PageTransition}"
-                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=4}">
+                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=2}">
                         <views:FriendsPage.RenderTransform><TranslateTransform /></views:FriendsPage.RenderTransform>
                     </views:FriendsPage>
                 </Grid>

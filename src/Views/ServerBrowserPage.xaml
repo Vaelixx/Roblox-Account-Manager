@@ -28,6 +28,13 @@
                 </StackPanel>
             </Button>
 
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                <Button Style="{StaticResource GhostButton}" Command="{Binding ToggleSortCommand}"
+                        Content="{Binding SortModeLabel}" ToolTip="Toggle server sort (players / ping)" />
+                <Button Style="{StaticResource GhostButton}" Command="{Binding CopyPlaceIdCommand}"
+                        Content="Copy ID" Margin="8,0,0,0" ToolTip="Copy the current Place ID" />
+            </StackPanel>
+
             <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="{Binding PlaceName}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold"
                            MaxWidth="240" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />

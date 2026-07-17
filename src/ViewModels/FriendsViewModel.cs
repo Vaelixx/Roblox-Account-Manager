@@ -65,6 +65,14 @@ public class FriendsViewModel : ObservableObject
     public AsyncRelayCommand JoinCommand { get; }
     public RelayCommand OpenProfileCommand { get; }
 
+    /// <summary>Called when the Friends tab becomes visible — auto-loads the list once.</summary>
+    public void EnsureLoaded()
+    {
+        if (Busy || Friends.Count > 0) return;
+        if (SelectedAccount == null) return;
+        _ = RefreshAsync();
+    }
+
     // ------------------------------------------------------------------
     //  Load
     // ------------------------------------------------------------------

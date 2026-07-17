@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:beh="clr-namespace:RobloxAccountManager.Behaviors">
 
     <!-- ============================================================= -->
     <!--  Icon path base                                                -->
@@ -729,6 +730,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}" />
+        <Setter Property="beh:MouseGlow.Enable" Value="True" />
     </Style>
 
 </ResourceDictionary>

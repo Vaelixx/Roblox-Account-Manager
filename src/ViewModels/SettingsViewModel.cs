@@ -64,7 +64,24 @@ public class SettingsViewModel : ObservableObject
         OpenPluginsFolderCommand = new RelayCommand(_ => OpenPluginsFolder());
         ReloadPluginsCommand = new RelayCommand(_ => ReloadPlugins());
         ResetThemeCommand = new RelayCommand(_ => ResetTheme());
+        TestWebhookCommand = new RelayCommand(_ => TestWebhook());
         BuildThemeRows();
+    }
+
+    // ---- Discord webhook ----
+    public string DiscordWebhookUrl { get => S.DiscordWebhookUrl; set { S.DiscordWebhookUrl = value; Persist(); } }
+    public bool NotifyOnCrash   { get => S.NotifyOnCrash;   set { S.NotifyOnCrash = value; Persist(); } }
+    public bool NotifyOnConnect { get => S.NotifyOnConnect; set { S.NotifyOnConnect = value; Persist(); } }
+
+    public RelayCommand TestWebhookCommand { get; }
+
+    private void TestWebhook()
+    {
+        if (!WebhookService.Configured) { _main.SetStatus("Enter a Discord webhook URL first."); return; }
+        _ = WebhookService.SendEmbedAsync("✅ Webhook test", "Your Roblox Account Manager webhook is working.",
+            WebhookService.ColorGreen, null,
+            new (string, string)[] { ("Status", "Connected"), ("App", AppInfo.Long) });
+        _main.SetStatus("Test embed sent to Discord.");
     }
 
     // Browser

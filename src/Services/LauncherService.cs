@@ -160,6 +160,8 @@ public static class LauncherService
             try { PluginService.RaiseLaunched(acc, placeId, jobId); } catch { }
             if (SettingsService.Current.ToastOnLaunch)
                 ToastService.Success("Launched", $"{acc.DisplayNameOrUser} is starting up.");
+            if (SettingsService.Current.NotifyOnConnect && WebhookService.Configured)
+                WebhookService.Connected(acc, placeId, jobId);
             return LaunchResult.Ok();
         }
         catch (Exception ex)

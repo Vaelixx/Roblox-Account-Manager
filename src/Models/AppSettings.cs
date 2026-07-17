@@ -54,7 +54,8 @@ public class AppSettings
 
     // ---- Notifications ----
     public string DiscordWebhookUrl { get; set; } = "";
-    public bool NotifyOnCrash { get; set; } = true;
+    public bool NotifyOnCrash { get; set; } = true;    // disconnect + reconnect embeds
+    public bool NotifyOnConnect { get; set; } = false; // embed when an account launches/connects
 
     // ---- Startup checks ----
     public bool ValidateCookiesOnStartup { get; set; } = false;

@@ -248,6 +248,33 @@
                         <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
                                   IsChecked="{Binding ToastOnCrash}" IsEnabled="{Binding EnableToasts}" />
                     </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <!-- Discord webhook (rich embeds) -->
+                    <StackPanel Margin="16,14">
+                        <TextBlock Text="Discord webhook" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <TextBlock Text="Send rich embed messages to a Discord channel on connect / disconnect / reconnect."
+                                   Style="{StaticResource Caption}" Margin="0,3,0,8" />
+                        <TextBox Text="{Binding DiscordWebhookUrl, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="https://discord.com/api/webhooks/..." />
+                        <Grid Margin="0,14,0,0">
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                                <TextBlock Text="Embed on connect" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="Post an embed each time an account launches / connects." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                            </StackPanel>
+                            <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifyOnConnect}" />
+                        </Grid>
+                        <Grid Margin="0,10,0,0">
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                                <TextBlock Text="Embed on disconnect / reconnect" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="Post embeds when a tracked client closes and when it auto-rejoins." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                            </StackPanel>
+                            <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifyOnCrash}" />
+                        </Grid>
+                        <Button Content="Send test embed" Command="{Binding TestWebhookCommand}"
+                                Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,14,0,0" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

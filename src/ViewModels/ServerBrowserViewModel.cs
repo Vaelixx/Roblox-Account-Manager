@@ -33,9 +33,20 @@ public class ServerBrowserViewModel : ObservableObject
 
     public int ServerCount => Servers.Count;
 
+    private bool _sortByPing;
+    /// <summary>false = sort by player count (busiest first); true = sort by ping (lowest first).</summary>
+    public bool SortByPing
+    {
+        get => _sortByPing;
+        set { if (SetField(ref _sortByPing, value)) { OnPropertyChanged(nameof(SortModeLabel)); ApplySort(); } }
+    }
+    public string SortModeLabel => _sortByPing ? "Sort: Ping" : "Sort: Players";
+
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand JoinCommand { get; }
     public RelayCommand CopyJobIdCommand { get; }
+    public RelayCommand ToggleSortCommand { get; }
+    public RelayCommand CopyPlaceIdCommand { get; }
 
     public ServerBrowserViewModel(AccountStore store, MainViewModel main)
     {
@@ -44,6 +55,25 @@ public class ServerBrowserViewModel : ObservableObject
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         JoinCommand = new AsyncRelayCommand(JoinAsync);
         CopyJobIdCommand = new RelayCommand(_ => CopyJobId());
+        ToggleSortCommand = new RelayCommand(_ => SortByPing = !SortByPing);
+        CopyPlaceIdCommand = new RelayCommand(_ => CopyPlaceId());
+    }
+
+    private void ApplySort()
+    {
+        var ordered = _sortByPing
+            ? Servers.OrderBy(s => s.Ping <= 0 ? int.MaxValue : s.Ping).ToList()
+            : Servers.OrderByDescending(s => s.Playing).ToList();
+        Servers.Clear();
+        foreach (var s in ordered) Servers.Add(s);
+    }
+
+    private void CopyPlaceId()
+    {
+        var t = new string(PlaceIdText.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrEmpty(t)) { _main.SetStatus("No Place ID to copy."); return; }
+        try { System.Windows.Clipboard.SetText(t); _main.SetStatus($"Place ID {t} copied."); }
+        catch { }
     }
 
     public async Task RefreshAsync()
@@ -75,7 +105,8 @@ public class ServerBrowserViewModel : ObservableObject
         }
 
         var list = await RobloxApi.GetPublicServersAsync(placeId, SettingsService.Current.ShufflePageCount);
-        foreach (var s in list.OrderByDescending(s => s.Playing)) Servers.Add(s);
+        foreach (var s in list) Servers.Add(s);
+        ApplySort();
 
         OnPropertyChanged(nameof(ServerCount));
         Busy = false;

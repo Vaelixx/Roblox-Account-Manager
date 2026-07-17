@@ -35,11 +35,11 @@ public class MainViewModel : ObservableObject
 
     public ObservableCollection<NavItem> NavItems { get; } = new()
     {
-        new NavItem { TitleKey = "Nav.Accounts",  IconKey = "Icon.Accounts", Index = 0 },
-        new NavItem { TitleKey = "Nav.Servers",   IconKey = "Icon.Servers",  Index = 1 },
-        new NavItem { TitleKey = "Nav.Settings",  IconKey = "Icon.Settings", Index = 2 },
-        new NavItem { TitleKey = "Nav.Dashboard", IconKey = "Icon.Activity", Index = 3 },
-        new NavItem { TitleKey = "Nav.Friends",   IconKey = "Icon.Friends",  Index = 4 },
+        new NavItem { TitleKey = "Nav.Dashboard", IconKey = "Icon.Activity", Index = 0 },
+        new NavItem { TitleKey = "Nav.Accounts",  IconKey = "Icon.Accounts", Index = 1 },
+        new NavItem { TitleKey = "Nav.Friends",   IconKey = "Icon.Friends",  Index = 2 },
+        new NavItem { TitleKey = "Nav.Servers",   IconKey = "Icon.Servers",  Index = 3 },
+        new NavItem { TitleKey = "Nav.Settings",  IconKey = "Icon.Settings", Index = 4 },
     };
 
     private int _selectedIndex;
@@ -52,7 +52,13 @@ public class MainViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(SelectedNav));
                 foreach (var n in NavItems) n.IsActive = n.Index == value;
-                if (value == 2) Settings.RefreshChromium();
+                if (value == 4) Settings.RefreshChromium();
+                if (value == 2) Friends.EnsureLoaded();
+                // Servers tab (index 3): auto-fill the Place ID from the game currently
+                // targeted on the Accounts tab so the user doesn't retype it.
+                if (value == 3 && string.IsNullOrWhiteSpace(Servers.PlaceIdText)
+                                && !string.IsNullOrWhiteSpace(Accounts.PlaceIdText))
+                    Servers.PlaceIdText = Accounts.PlaceIdText;
             }
         }
     }
@@ -174,7 +180,7 @@ public class MainViewModel : ObservableObject
     public void OpenServersFor(long placeId)
     {
         Servers.PlaceIdText = placeId.ToString();
-        SelectedIndex = 1;
+        SelectedIndex = 3;
         _ = Servers.RefreshAsync();
     }
 }
