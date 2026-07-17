@@ -28,6 +28,7 @@ public class MainViewModel : ObservableObject
     public ServerBrowserViewModel Servers { get; }
     public SettingsViewModel Settings { get; }
     public DashboardViewModel Dashboard { get; }
+    public FriendsViewModel Friends { get; }
 
     /// <summary>In-app toast stack, surfaced by the main-window overlay (#30).</summary>
     public ObservableCollection<ToastItem> Toasts => ToastService.Items;
@@ -38,6 +39,7 @@ public class MainViewModel : ObservableObject
         new NavItem { TitleKey = "Nav.Servers",   IconKey = "Icon.Servers",  Index = 1 },
         new NavItem { TitleKey = "Nav.Settings",  IconKey = "Icon.Settings", Index = 2 },
         new NavItem { TitleKey = "Nav.Dashboard", IconKey = "Icon.Activity", Index = 3 },
+        new NavItem { TitleKey = "Nav.Friends",   IconKey = "Icon.Friends",  Index = 4 },
     };
 
     private int _selectedIndex;
@@ -69,6 +71,8 @@ public class MainViewModel : ObservableObject
     private static bool s_updateCheckStarted; // at most one check per process run
 
     private UpdateInfo? _update;
+    private string? _promptedVersion;                 // last version the modal was shown for
+    private System.Windows.Threading.DispatcherTimer? _updateTimer;
     public bool UpdateAvailable => _update != null;
 
     private string _updateVersionText = "";
@@ -93,6 +97,7 @@ public class MainViewModel : ObservableObject
         Servers = new ServerBrowserViewModel(Store, this);
         Settings = new SettingsViewModel(this);
         Dashboard = new DashboardViewModel(Store);
+        Friends = new FriendsViewModel(Store, this);
 
         NavItems[0].IsActive = true;
 
@@ -111,6 +116,13 @@ public class MainViewModel : ObservableObject
             s_updateCheckStarted = true;
             _ = CheckForUpdateAsync();
         }
+
+        // Then keep polling once a minute so a freshly published release is picked up fast.
+        // The modal only appears once per version (see CheckForUpdateAsync); the title-bar
+        // pill just stays put, so the recurring check never nags the user.
+        _updateTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _updateTimer.Tick += (_, _) => _ = CheckForUpdateAsync();
+        _updateTimer.Start();
     }
 
     public void SetStatus(string s) => Status = s;
@@ -128,9 +140,13 @@ public class MainViewModel : ObservableObject
             UpdateVersionText = $"Update available — {info.VersionText}";
             OnPropertyChanged(nameof(UpdateAvailable));
 
-            // Proactively surface the update once with an Update / Later prompt.
-            // "Later" just leaves the title-bar pill in place so it can be triggered any time.
-            PromptForUpdate(info);
+            // Surface the modal once per discovered version. On every following minute the
+            // pill stays visible but we don't re-prompt, so the 1-min poll never nags.
+            if (_promptedVersion != info.VersionText)
+            {
+                _promptedVersion = info.VersionText;
+                PromptForUpdate(info);
+            }
         });
     }
 

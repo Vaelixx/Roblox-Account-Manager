@@ -213,6 +213,10 @@
                                         Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=3}">
                         <views:DashboardPage.RenderTransform><TranslateTransform /></views:DashboardPage.RenderTransform>
                     </views:DashboardPage>
+                    <views:FriendsPage DataContext="{Binding Friends}" Style="{StaticResource PageTransition}"
+                                        Visibility="{Binding DataContext.SelectedIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource IndexToVis}, ConverterParameter=4}">
+                        <views:FriendsPage.RenderTransform><TranslateTransform /></views:FriendsPage.RenderTransform>
+                    </views:FriendsPage>
                 </Grid>
             </Grid>
 

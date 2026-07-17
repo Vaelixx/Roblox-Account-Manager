@@ -31,6 +31,7 @@ public static class LocalizationService
         ["Nav.Accounts"]  = new() { ["en"] = "Accounts",  ["de"] = "Konten" },
         ["Nav.Servers"]   = new() { ["en"] = "Servers",   ["de"] = "Server" },
         ["Nav.Dashboard"] = new() { ["en"] = "Dashboard", ["de"] = "Übersicht" },
+        ["Nav.Friends"]   = new() { ["en"] = "Friends",   ["de"] = "Freunde" },
         ["Nav.Settings"]  = new() { ["en"] = "Settings",  ["de"] = "Einstellungen" },
 
         // Settings section headers

@@ -49,6 +49,9 @@ public static class RobloxApi
     // ---------------------------------------------------------------
     public record Identity(long Id, string Name, string DisplayName);
 
+    /// <summary>Rich presence for one user, including the join target for follow-launch.</summary>
+    public record PresenceDetail(string Status, string LastLocation, long PlaceId, long RootPlaceId, long UniverseId, string? JobId);
+
     public static async Task<Identity?> GetAuthenticatedUserAsync(string cookie)
     {
         try
@@ -237,6 +240,70 @@ public static class RobloxApi
                 long id = p.GetProperty("userId").GetInt64();
                 int type = p.GetProperty("userPresenceType").GetInt32();
                 result[id] = type switch { 1 => "Online", 2 => "In Game", 3 => "In Studio", _ => "Offline" };
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    // ---------------------------------------------------------------
+    //  Friends
+    // ---------------------------------------------------------------
+    /// <summary>
+    /// Full friends list of <paramref name="userId"/>. Sent with the account's own cookie
+    /// so private display names / friendships resolve correctly.
+    /// </summary>
+    public static async Task<List<Friend>> GetFriendsAsync(string cookie, long userId)
+    {
+        var result = new List<Friend>();
+        if (userId <= 0) return result;
+        try
+        {
+            var resp = await Http.SendAsync(Build(HttpMethod.Get,
+                $"https://friends.roblox.com/v1/users/{userId}/friends", cookie));
+            if (!resp.IsSuccessStatusCode) return result;
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            if (!doc.RootElement.TryGetProperty("data", out var data)) return result;
+            foreach (var f in data.EnumerateArray())
+            {
+                long id = f.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt64() : 0;
+                if (id <= 0) continue;
+                string name = f.TryGetProperty("name", out var nEl) ? (nEl.GetString() ?? "") : "";
+                string disp = f.TryGetProperty("displayName", out var dEl) ? (dEl.GetString() ?? "") : "";
+                result.Add(new Friend { UserId = id, Username = name, DisplayName = disp });
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    /// <summary>
+    /// Rich presence (status + last location + join target) for a batch of user ids.
+    /// Unlike <see cref="GetPresencesAsync"/> this also returns place / job id so a friend
+    /// can be followed into their game directly.
+    /// </summary>
+    public static async Task<Dictionary<long, PresenceDetail>> GetPresenceDetailsAsync(string cookie, IEnumerable<long> userIds)
+    {
+        var result = new Dictionary<long, PresenceDetail>();
+        var ids = userIds.Where(i => i > 0).Distinct().ToArray();
+        if (ids.Length == 0) return result;
+        try
+        {
+            var resp = await Http.SendAsync(Build(HttpMethod.Post, "https://presence.roblox.com/v1/presence/users", cookie,
+                content: Json(new { userIds = ids })));
+            if (!resp.IsSuccessStatusCode) return result;
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            foreach (var p in doc.RootElement.GetProperty("userPresences").EnumerateArray())
+            {
+                long id = p.GetProperty("userId").GetInt64();
+                int type = p.TryGetProperty("userPresenceType", out var t) ? t.GetInt32() : 0;
+                string status = type switch { 1 => "Online", 2 => "In Game", 3 => "In Studio", _ => "Offline" };
+                string loc = p.TryGetProperty("lastLocation", out var l) ? (l.GetString() ?? "") : "";
+                long place = p.TryGetProperty("placeId", out var pe)     && pe.ValueKind == JsonValueKind.Number ? pe.GetInt64() : 0;
+                long root  = p.TryGetProperty("rootPlaceId", out var re) && re.ValueKind == JsonValueKind.Number ? re.GetInt64() : 0;
+                long uni   = p.TryGetProperty("universeId", out var ue)  && ue.ValueKind == JsonValueKind.Number ? ue.GetInt64() : 0;
+                string? job = p.TryGetProperty("gameId", out var ge)     && ge.ValueKind == JsonValueKind.String ? ge.GetString() : null;
+                result[id] = new PresenceDetail(status, loc, place, root, uni, job);
             }
         }
         catch { }
