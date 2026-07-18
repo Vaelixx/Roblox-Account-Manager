@@ -11,6 +11,8 @@ public static class SettingsService
 
     public static AppSettings Current { get; private set; } = new();
 
+    private static readonly object _saveLock = new();
+
     public static void Load()
     {
         try
@@ -23,16 +25,42 @@ public static class SettingsService
         }
         catch
         {
+            // A malformed/incompatible file would otherwise be silently overwritten with
+            // defaults on the next Save(), wiping every setting. Preserve it for recovery
+            // instead so the user (or a bug report) can see what went wrong.
+            TryPreserveCorruptFile();
             Current = new AppSettings();
         }
+    }
+
+    private static void TryPreserveCorruptFile()
+    {
+        try
+        {
+            if (!File.Exists(Path_)) return;
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            File.Copy(Path_, Path_ + ".corrupt-" + stamp, overwrite: true);
+        }
+        catch { /* best-effort */ }
     }
 
     public static void Save()
     {
         try
         {
-            Directory.CreateDirectory(Paths.DataDir);
-            File.WriteAllText(Path_, JsonSerializer.Serialize(Current, JsonOpts));
+            string json = JsonSerializer.Serialize(Current, JsonOpts);
+            lock (_saveLock)
+            {
+                Directory.CreateDirectory(Paths.DataDir);
+                // Atomic write: stage to a temp file then swap, so a crash mid-write can
+                // never truncate settings.json.
+                string tmp = Path_ + ".tmp";
+                File.WriteAllText(tmp, json);
+                if (File.Exists(Path_))
+                    File.Replace(tmp, Path_, null);
+                else
+                    File.Move(tmp, Path_);
+            }
         }
         catch { /* best-effort */ }
     }

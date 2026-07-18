@@ -49,9 +49,16 @@ public static class BackupService
         byte[] json = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(entries, JsonOpts));
         byte[] enc = Crypto.EncryptPassword(json, password);
 
-        using var fs = File.Create(path);
-        fs.Write(Magic);
-        fs.Write(enc);
+        // Atomic write: build the whole file in a temp path first, then move it into place,
+        // so a crash / disk-full mid-write can't leave a truncated (unrecoverable) backup —
+        // especially when overwriting an existing export at the same path.
+        string tmp = path + ".tmp";
+        using (var fs = File.Create(tmp))
+        {
+            fs.Write(Magic);
+            fs.Write(enc);
+        }
+        File.Move(tmp, path, overwrite: true);
     }
 
     /// <summary>

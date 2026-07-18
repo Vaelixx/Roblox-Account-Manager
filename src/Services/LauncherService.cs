@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -12,7 +13,9 @@ public static class LauncherService
     private static Mutex? _multiMutex;
 
     // Remembers the last client we spawned per account so we can close it on relaunch.
-    private static readonly Dictionary<long, int> _lastProcess = new();
+    // Concurrent because it's written from delayed launch tasks and read/cleared from the
+    // UI thread (relaunch) and the global "close all" hotkey — potentially at the same time.
+    private static readonly ConcurrentDictionary<long, int> _lastProcess = new();
 
     // Shared store so a rotated .ROBLOSECURITY captured during launch can be persisted.
     private static AccountStore? _store;
@@ -209,12 +212,13 @@ public static class LauncherService
                 using var p = Process.GetProcessById(pid);
                 if (!p.HasExited && p.ProcessName.StartsWith("RobloxPlayer", StringComparison.OrdinalIgnoreCase))
                 {
+                    // Give the graceful close a brief chance to take effect before forcing it.
                     p.CloseMainWindow();
-                    p.Kill();
+                    if (!p.WaitForExit(1500)) p.Kill();
                 }
             }
             catch { }
-            _lastProcess.Remove(acc.UserId);
+            _lastProcess.TryRemove(acc.UserId, out _);
         }
     }
 
@@ -234,7 +238,7 @@ public static class LauncherService
                 if (!p.HasExited)
                 {
                     p.CloseMainWindow();
-                    p.Kill();
+                    if (!p.WaitForExit(1500)) p.Kill();
                     closed++;
                 }
             }

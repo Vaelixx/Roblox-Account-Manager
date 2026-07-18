@@ -136,25 +136,33 @@ public class MainViewModel : ObservableObject
 
     private async Task CheckForUpdateAsync()
     {
-        var info = await UpdateService.CheckForUpdateAsync().ConfigureAwait(false);
-        if (info == null) return;
-
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher == null) return;
-        await dispatcher.InvokeAsync(() =>
+        try
         {
-            _update = info;
-            UpdateVersionText = $"Update available — {info.VersionText}";
-            OnPropertyChanged(nameof(UpdateAvailable));
+            var info = await UpdateService.CheckForUpdateAsync().ConfigureAwait(false);
+            if (info == null) return;
 
-            // Surface the modal once per discovered version. On every following minute the
-            // pill stays visible but we don't re-prompt, so the 1-min poll never nags.
-            if (_promptedVersion != info.VersionText)
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null) return;
+            await dispatcher.InvokeAsync(() =>
             {
-                _promptedVersion = info.VersionText;
-                PromptForUpdate(info);
-            }
-        });
+                _update = info;
+                UpdateVersionText = $"Update available — {info.VersionText}";
+                OnPropertyChanged(nameof(UpdateAvailable));
+
+                // Surface the modal once per discovered version. On every following minute the
+                // pill stays visible but we don't re-prompt, so the 1-min poll never nags.
+                if (_promptedVersion != info.VersionText)
+                {
+                    _promptedVersion = info.VersionText;
+                    PromptForUpdate(info);
+                }
+            });
+        }
+        catch
+        {
+            // Best-effort background poll: a network/parse failure must not bubble up as an
+            // unobserved task exception every 5 minutes. The pill simply stays as-is.
+        }
     }
 
     // Triggered by the title-bar update pill.

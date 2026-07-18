@@ -75,7 +75,9 @@ public static class HotkeyService
         var hWnd = _window.Handle;
         foreach (var id in _actions.Keys) UnregisterHotKey(hWnd, id);
         _actions.Clear();
-        _window.ReleaseHandle();
+        // DestroyHandle (not ReleaseHandle) actually destroys the underlying HWND; a plain
+        // ReleaseHandle only detaches the NativeWindow wrapper and leaks the message window.
+        _window.DestroyHandle();
         _window = null;
     }
 

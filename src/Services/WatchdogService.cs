@@ -14,6 +14,26 @@ public static class WatchdogService
     private static Func<long, Account?>? _accountLookup;
     private static bool _hooked;
 
+    // Crash-loop brake: at most MaxRejoins auto-rejoins per account inside RejoinWindow.
+    // Without this an instantly-crashing game relaunches forever (launch → crash → launch …).
+    private const int MaxRejoins = 3;
+    private static readonly TimeSpan RejoinWindow = TimeSpan.FromMinutes(10);
+    private static readonly Dictionary<long, Queue<DateTime>> _rejoins = new();
+
+    /// <summary>Claims one rejoin slot for the account; false when the crash-loop cap is hit.</summary>
+    private static bool TryClaimRejoin(long userId)
+    {
+        lock (_rejoins)
+        {
+            if (!_rejoins.TryGetValue(userId, out var q)) _rejoins[userId] = q = new();
+            var cutoff = DateTime.UtcNow - RejoinWindow;
+            while (q.Count > 0 && q.Peek() < cutoff) q.Dequeue();
+            if (q.Count >= MaxRejoins) return false;
+            q.Enqueue(DateTime.UtcNow);
+            return true;
+        }
+    }
+
     /// <summary>Wires the account lookup used for auto-rejoin. Call once at startup.</summary>
     public static void Init(Func<long, Account?> accountLookup)
     {
@@ -34,7 +54,9 @@ public static class WatchdogService
         {
             var period = TimeSpan.FromSeconds(seconds);
             if (_timer == null)
-                _timer = new System.Threading.Timer(_ => ProcessRegistry.Prune(), null, period, period);
+                _timer = new System.Threading.Timer(
+                    _ => { try { ProcessRegistry.Prune(); } catch { } },   // a throwing Timer callback kills the process
+                    null, period, period);
             else
                 _timer.Change(period, period);
         }
@@ -63,6 +85,19 @@ public static class WatchdogService
             ToastService.Warning("Client closed", $"{t.Alias} closed or crashed (place {t.PlaceId}).");
 
         if (acc == null || !acc.AutoRejoin) return;
+
+        if (!TryClaimRejoin(acc.UserId))
+        {
+            // Crash loop: give up instead of relaunching forever.
+            int mins = (int)RejoinWindow.TotalMinutes;
+            if (s.ToastOnCrash)
+                ToastService.Warning("Auto-rejoin paused",
+                    $"{t.Alias} crashed {MaxRejoins} times within {mins} min — not rejoining.");
+            if (WebhookService.Configured)
+                WebhookService.ReconnectFailed(t.Alias, acc.ThumbnailUrl, t.PlaceId,
+                    $"crash loop: {MaxRejoins} rejoins in {mins} min, giving up");
+            return;
+        }
 
         // We treat this exit as a crash and are about to auto-rejoin: tell plugins first.
         try { PluginService.RaiseCrashed(acc, t.PlaceId, t.JobId); } catch { }

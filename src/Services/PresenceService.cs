@@ -15,7 +15,10 @@ public static class PresenceService
 {
     private static AccountStore? _store;
     private static Timer? _timer;
-    private static volatile bool _busy;
+    private static readonly object _gate = new();
+    // 0 = idle, 1 = a poll is in flight. Interlocked so a manual PollNowAsync racing the
+    // periodic tick can't both pass the guard and double up the network calls.
+    private static int _busy;
 
     /// <summary>Raised after every completed poll (fires on a threadpool thread).</summary>
     public static event Action? PresenceUpdated;
@@ -26,18 +29,24 @@ public static class PresenceService
     public static void Start()
     {
         if (_store == null) return;
-        Stop();
-        if (!SettingsService.Current.ShowPresence) return;
+        lock (_gate)   // serialise timer create/dispose so rapid restarts can't leak a Timer
+        {
+            Stop();
+            if (!SettingsService.Current.ShowPresence) return;
 
-        int secs = Math.Max(10, SettingsService.Current.PresencePollSeconds);
-        _timer = new Timer(_ => _ = TickAsync(), null,
-                           TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(secs));
+            int secs = Math.Max(10, SettingsService.Current.PresencePollSeconds);
+            _timer = new Timer(_ => _ = TickAsync(), null,
+                               TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(secs));
+        }
     }
 
     public static void Stop()
     {
-        _timer?.Dispose();
-        _timer = null;
+        lock (_gate)
+        {
+            _timer?.Dispose();
+            _timer = null;
+        }
     }
 
     /// <summary>Forces an immediate poll regardless of the timer cadence.</summary>
@@ -45,16 +54,17 @@ public static class PresenceService
 
     private static async Task TickAsync()
     {
-        if (_busy || _store == null) return;
+        if (_store == null) return;
         if (!SettingsService.Current.ShowPresence) return;
+        // Atomic claim: bail if a poll is already running (periodic tick vs. PollNowAsync).
+        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0) return;
 
-        _busy = true;
         try
         {
             await _store.RefreshPresenceOnlyAsync();
             PresenceUpdated?.Invoke();
         }
         catch { /* transient network failure — retry on the next tick */ }
-        finally { _busy = false; }
+        finally { Interlocked.Exchange(ref _busy, 0); }
     }
 }

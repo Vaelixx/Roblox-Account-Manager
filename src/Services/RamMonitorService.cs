@@ -13,6 +13,9 @@ public static class RamMonitorService
 
     private static System.Threading.Timer? _timer;
     private static readonly object _gate = new();
+    // 0 = idle, 1 = a sample is in flight. Prevents a slow sample (many clients) from being
+    // re-entered by the next timer fire on another pool thread, which would race on Latest.
+    private static int _busy;
 
     /// <summary>Latest per-client RAM snapshot (empty until the first tick). Read-only for the UI.</summary>
     public static IReadOnlyList<Sample> Latest { get; private set; } = Array.Empty<Sample>();
@@ -46,6 +49,17 @@ public static class RamMonitorService
     }
 
     private static void Tick()
+    {
+        // Skip if the previous sample is still running (slow enumeration under many clients).
+        if (System.Threading.Interlocked.CompareExchange(ref _busy, 1, 0) != 0) return;
+        try
+        {
+            TickCore();
+        }
+        finally { System.Threading.Interlocked.Exchange(ref _busy, 0); }
+    }
+
+    private static void TickCore()
     {
         var s = SettingsService.Current;
         var snapshot = new List<Sample>();

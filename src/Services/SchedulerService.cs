@@ -23,11 +23,18 @@ public static class SchedulerService
         lock (_gate)
         {
             if (_timer != null) return;
-            // First tick aligned to the next whole minute, then every 60 s.
-            var now = DateTime.Now;
-            var due = TimeSpan.FromSeconds(60 - now.Second);
-            _timer = new System.Threading.Timer(_ => Tick(), null, due, TimeSpan.FromMinutes(1));
+            // Single-shot, re-armed after every tick so we stay aligned to wall-clock
+            // minute boundaries. A fixed 60 s period drifts over hours and can skip a minute.
+            _timer = new System.Threading.Timer(_ => Tick(), null, DueToNextMinute(), Timeout.InfiniteTimeSpan);
         }
+    }
+
+    /// <summary>Time until shortly after the next wall-clock minute boundary.</summary>
+    private static TimeSpan DueToNextMinute()
+    {
+        var now = DateTime.Now;
+        int ms = 60_000 - (now.Second * 1000 + now.Millisecond) + 250;   // +250 ms: land safely past :00
+        return TimeSpan.FromMilliseconds(ms);
     }
 
     public static void Stop()
@@ -37,20 +44,31 @@ public static class SchedulerService
 
     private static void Tick()
     {
-        var now = DateTime.Now;
-        var hhmm = now.ToString("HH:mm");
-
-        foreach (var task in SettingsService.Current.ScheduledTasks)
+        try
         {
-            if (!task.Enabled) continue;
-            if (task.TimeOfDay != hhmm) continue;
-            if (task.Days.Count > 0 && !task.Days.Contains(now.DayOfWeek)) continue;
+            var now = DateTime.Now;
+            var hhmm = now.ToString("HH:mm");
 
-            // Fire at most once per matching minute.
-            if ((DateTime.UtcNow - task.LastFiredUtc) < TimeSpan.FromSeconds(90)) continue;
-            task.LastFiredUtc = DateTime.UtcNow;
+            // Snapshot: the settings UI can add/remove tasks while we enumerate. An
+            // unhandled exception in a Timer callback would take down the whole process.
+            foreach (var task in SettingsService.Current.ScheduledTasks.ToArray())
+            {
+                if (!task.Enabled) continue;
+                if (task.TimeOfDay != hhmm) continue;
+                if (task.Days.Count > 0 && !task.Days.Contains(now.DayOfWeek)) continue;
 
-            _ = FireAsync(task);
+                // Fire at most once per matching minute.
+                if ((DateTime.UtcNow - task.LastFiredUtc) < TimeSpan.FromSeconds(90)) continue;
+                task.LastFiredUtc = DateTime.UtcNow;
+
+                _ = FireAsync(task);
+            }
+        }
+        catch { /* never let a bad tick kill the scheduler (or the process) */ }
+        finally
+        {
+            // Re-arm aligned to the next minute; skipped if Stop() ran meanwhile.
+            lock (_gate) _timer?.Change(DueToNextMinute(), Timeout.InfiniteTimeSpan);
         }
     }
 

@@ -13,7 +13,9 @@ public static class AntiAfkService
 {
     private static System.Threading.Timer? _timer;
     private static readonly object _gate = new();
-    private static volatile bool _running;
+    // 0 = idle, 1 = a pass is running. Interlocked so the periodic tick and a manual
+    // RunOnce ("Test now") can't both pass the guard and send overlapping key taps.
+    private static int _running;
 
     /// <summary>Re-reads settings and starts/stops the loop accordingly. Call after any settings change.</summary>
     public static void Apply()
@@ -58,8 +60,7 @@ public static class AntiAfkService
     /// </summary>
     private static void Pass()
     {
-        if (_running) return;               // never overlap passes
-        _running = true;
+        if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) return;   // never overlap passes
         try
         {
             var s = SettingsService.Current;
@@ -82,7 +83,7 @@ public static class AntiAfkService
                 Win32.ForceForeground(userWindow);
         }
         catch { }
-        finally { _running = false; }
+        finally { Interlocked.Exchange(ref _running, 0); }
     }
 
     /// <summary>Runs one anti-AFK pass immediately regardless of the enabled flag (for a "Test now" button).</summary>

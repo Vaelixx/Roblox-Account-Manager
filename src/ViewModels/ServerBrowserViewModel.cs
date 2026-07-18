@@ -73,7 +73,7 @@ public class ServerBrowserViewModel : ObservableObject
         var t = new string(PlaceIdText.Where(char.IsDigit).ToArray());
         if (string.IsNullOrEmpty(t)) { _main.SetStatus("No Place ID to copy."); return; }
         try { System.Windows.Clipboard.SetText(t); _main.SetStatus($"Place ID {t} copied."); }
-        catch { }
+        catch { _main.SetStatus("Could not access the clipboard."); }
     }
 
     public async Task RefreshAsync()
@@ -90,27 +90,38 @@ public class ServerBrowserViewModel : ObservableObject
         OnPropertyChanged(nameof(ServerCount));
         _main.SetStatus("Loading servers…");
 
-        IsSubPlace = false;
-        SubPlaceTip = "";
-        var cookie = _store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie;
-        if (cookie != null)
+        try
         {
-            var info = await RobloxApi.GetPlaceInfoAsync(cookie, placeId);
-            PlaceName = info?.Name ?? $"Place {placeId}";
-            if (info != null && info.IsSubPlace)
+            IsSubPlace = false;
+            SubPlaceTip = "";
+            var cookie = _store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie;
+            if (cookie != null)
             {
-                IsSubPlace = true;
-                SubPlaceTip = $"Place {info.PlaceId} is a sub-place of universe {info.UniverseId} (root place {info.RootPlaceId}). Servers here are teleport/co-edit instances, not the main game.";
+                var info = await RobloxApi.GetPlaceInfoAsync(cookie, placeId);
+                PlaceName = info?.Name ?? $"Place {placeId}";
+                if (info != null && info.IsSubPlace)
+                {
+                    IsSubPlace = true;
+                    SubPlaceTip = $"Place {info.PlaceId} is a sub-place of universe {info.UniverseId} (root place {info.RootPlaceId}). Servers here are teleport/co-edit instances, not the main game.";
+                }
             }
+
+            var list = await RobloxApi.GetPublicServersAsync(placeId, SettingsService.Current.ShufflePageCount);
+            foreach (var s in list) Servers.Add(s);
+            ApplySort();
+
+            OnPropertyChanged(nameof(ServerCount));
+            _main.SetStatus($"Found {Servers.Count} public server(s).");
         }
-
-        var list = await RobloxApi.GetPublicServersAsync(placeId, SettingsService.Current.ShufflePageCount);
-        foreach (var s in list) Servers.Add(s);
-        ApplySort();
-
-        OnPropertyChanged(nameof(ServerCount));
-        Busy = false;
-        _main.SetStatus($"Found {Servers.Count} public server(s).");
+        catch (Exception ex)
+        {
+            // Never leave Busy stuck true (buttons would stay disabled for the session).
+            _main.SetStatus($"Could not load servers: {ex.Message}");
+        }
+        finally
+        {
+            Busy = false;
+        }
     }
 
     private async Task JoinAsync()
@@ -123,15 +134,25 @@ public class ServerBrowserViewModel : ObservableObject
 
         Busy = true;
         _main.SetStatus($"Joining {acc.DisplayNameOrUser} into server {_selected.ShortId}…");
-        var r = await LauncherService.LaunchAsync(acc, placeId, _selected.Id);
-        Busy = false;
-        _main.SetStatus(r.Success ? $"Launched {acc.DisplayNameOrUser}." : r.Message);
+        try
+        {
+            var r = await LauncherService.LaunchAsync(acc, placeId, _selected.Id);
+            _main.SetStatus(r.Success ? $"Launched {acc.DisplayNameOrUser}." : r.Message);
+        }
+        catch (Exception ex)
+        {
+            _main.SetStatus($"Join failed: {ex.Message}");
+        }
+        finally
+        {
+            Busy = false;
+        }
     }
 
     private void CopyJobId()
     {
         if (_selected == null) return;
         try { System.Windows.Clipboard.SetText(_selected.Id); _main.SetStatus("Job ID copied."); }
-        catch { }
+        catch { _main.SetStatus("Could not access the clipboard."); }
     }
 }

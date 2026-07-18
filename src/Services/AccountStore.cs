@@ -13,6 +13,11 @@ public class AccountStore
     private static readonly string BackupPath = Paths.InData("accounts.bak");
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
 
+    // Serialises disk writes: Save() can be triggered from the UI thread and from
+    // WebApiService's background HttpListener callbacks (rotated-cookie persistence) at
+    // the same time; without this two interleaved saves can corrupt the store or backup.
+    private static readonly object _saveLock = new();
+
     public ObservableCollection<Account> Accounts { get; } = new();
 
     /// <summary>null = no master password (DPAPI mode). Non-null = current master password.</summary>
@@ -60,12 +65,9 @@ public class AccountStore
     {
         try
         {
-            Directory.CreateDirectory(Paths.DataDir);
-            if (File.Exists(StorePath))
-                File.Copy(StorePath, BackupPath, overwrite: true);
-
             // The cookie is DPAPI-encrypted per account, so it is NEVER written as plain text —
-            // not even inside the (already encrypted) store JSON.
+            // not even inside the (already encrypted) store JSON. Snapshot + serialise up front
+            // so the (potentially expensive) crypto happens before we hold the write lock.
             var dtos = Accounts.Select(Persisted.FromAccount).ToList();
             string json = JsonSerializer.Serialize(dtos, JsonOpts);
             byte[] plain = Encoding.UTF8.GetBytes(json);
@@ -73,7 +75,21 @@ public class AccountStore
                 ? Crypto.EncryptPassword(plain, MasterPassword)
                 : Crypto.EncryptDpapi(plain);
 
-            File.WriteAllBytes(StorePath, encrypted);
+            lock (_saveLock)
+            {
+                Directory.CreateDirectory(Paths.DataDir);
+                if (File.Exists(StorePath))
+                    File.Copy(StorePath, BackupPath, overwrite: true);
+
+                // Atomic write: stage to a temp file, then swap it into place so a crash or
+                // power-loss mid-write can never leave a truncated/corrupt accounts.dat.
+                string tmp = StorePath + ".tmp";
+                File.WriteAllBytes(tmp, encrypted);
+                if (File.Exists(StorePath))
+                    File.Replace(tmp, StorePath, null);
+                else
+                    File.Move(tmp, StorePath);
+            }
         }
         catch { /* best-effort; backup remains */ }
     }

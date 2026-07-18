@@ -45,7 +45,15 @@ public class FriendsViewModel : ObservableObject
     public Account? SelectedAccount
     {
         get => _selectedAccount;
-        set => SetField(ref _selectedAccount, value);
+        set
+        {
+            if (!SetField(ref _selectedAccount, value)) return;
+            // Switching accounts must drop the previous account's friends; otherwise
+            // EnsureLoaded's "Friends.Count > 0" guard keeps showing the old account's list.
+            _all.Clear();
+            Friends.Clear();
+            EmptyText = "Pick an account and hit Refresh to load its friends.";
+        }
     }
 
     private string _searchText = "";
