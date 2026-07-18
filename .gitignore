@@ -42,3 +42,6 @@ _relnotes_*.md
 
 # Publish-Output
 publish/
+
+# Website (GitHub Pages) - lokal, nie committen (kann private Screenshots/Daten enthalten)
+docs/
