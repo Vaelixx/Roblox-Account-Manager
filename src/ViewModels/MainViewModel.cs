@@ -130,6 +130,9 @@ public class MainViewModel : ObservableObject
         _updateTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
         _updateTimer.Tick += (_, _) => _ = CheckForUpdateAsync();
         _updateTimer.Start();
+
+        // "What's new" once after every update — the first run of a freshly installed version.
+        _ = ShowWhatsNewIfUpdatedAsync();
     }
 
     public void SetStatus(string s) => Status = s;
@@ -173,16 +176,49 @@ public class MainViewModel : ObservableObject
 
     private void PromptForUpdate(UpdateInfo info)
     {
-        if (!DialogService.Confirm(
-                "Update available",
-                $"{info.VersionText} is available.\nThe app will close, install the update and restart.",
-                okText: "Update", cancelText: "Later"))
+        var win = new Views.UpdatePromptWindow(info);
+        if (Application.Current?.MainWindow is { IsVisible: true } owner) win.Owner = owner;
+        if (win.ShowDialog() != true)
             return; // "Later" — keep the pill, do nothing
 
         if (UpdateService.BeginUpdate(info))
             Application.Current.Shutdown();
         else
             SetStatus("Update could not be started — please try again later.");
+    }
+
+    /// <summary>
+    /// Shows the changelog window exactly once after an update: when the running version
+    /// differs from the last one recorded in settings. Fresh installs only record the
+    /// version silently — there is nothing "new" to announce.
+    /// </summary>
+    private async Task ShowWhatsNewIfUpdatedAsync()
+    {
+        try
+        {
+            var s = SettingsService.Current;
+            string current = UpdateService.CurrentVersionText;
+            if (s.LastSeenVersion == current) return;
+
+            bool firstInstall = string.IsNullOrEmpty(s.LastSeenVersion);
+            s.LastSeenVersion = current;
+            SettingsService.Save();
+            if (firstInstall) return;
+
+            var notes = await UpdateService.GetReleaseNotesAsync(current).ConfigureAwait(false);
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null) return;
+            await dispatcher.InvokeAsync(() =>
+            {
+                var win = new Views.WhatsNewWindow(current, notes?.Notes, notes?.PageUrl);
+                if (Application.Current?.MainWindow is { IsVisible: true } owner) win.Owner = owner;
+                win.ShowDialog();
+            });
+        }
+        catch
+        {
+            // The changelog must never break startup; worst case the window is skipped.
+        }
     }
 
     public void OpenServersFor(long placeId)

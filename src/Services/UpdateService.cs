@@ -8,10 +8,15 @@ using System.Text.RegularExpressions;
 namespace RobloxAccountManager.Services;
 
 /// <summary>A newer release discovered on GitHub.</summary>
-public sealed record UpdateInfo(Version Version, string DownloadUrl, long Size)
+public sealed record UpdateInfo(
+    Version Version, string DownloadUrl, long Size,
+    string? Notes = null, DateTime? PublishedAt = null, string? ReleasePageUrl = null)
 {
     /// <summary>Short display form, e.g. "v1.1.0".</summary>
     public string VersionText => $"v{Version.ToString(3)}";
+
+    /// <summary>Download size, e.g. "154.9 MB"; empty when GitHub didn't report one.</summary>
+    public string SizeText => Size > 0 ? $"{Size / 1024.0 / 1024.0:0.#} MB" : "";
 }
 
 /// <summary>
@@ -49,6 +54,15 @@ public static class UpdateService
                 root.TryGetProperty("name", out var name) ? name.GetString() : null);
             if (remote == null || remote <= CurrentVersion()) return null;
 
+            // Release metadata for the richer update prompt (all optional — null on any miss).
+            string? notes = root.TryGetProperty("body", out var body) ? body.GetString() : null;
+            string? pageUrl = root.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
+            DateTime? publishedAt =
+                root.TryGetProperty("published_at", out var pa)
+                && DateTime.TryParse(pa.GetString(), null,
+                       System.Globalization.DateTimeStyles.AdjustToUniversal, out var dt)
+                    ? dt : null;
+
             // First .exe asset is the new single-file build; without one there is nothing to install.
             if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
                 return null;
@@ -61,7 +75,7 @@ public static class UpdateService
                 if (string.IsNullOrEmpty(url)) continue;
 
                 long size = asset.TryGetProperty("size", out var s) && s.TryGetInt64(out long sz) ? sz : 0;
-                return new UpdateInfo(remote, url, size);
+                return new UpdateInfo(remote, url, size, notes, publishedAt, pageUrl);
             }
             return null;
         }
@@ -103,6 +117,37 @@ public static class UpdateService
         {
             Debug.WriteLine($"[UpdateService] Failed to launch updater: {ex.Message}");
             return false;
+        }
+    }
+
+    /// <summary>Display version of the running build, e.g. "v1.3.0".</summary>
+    public static string CurrentVersionText => $"v{CurrentVersion().ToString(3)}";
+
+    /// <summary>
+    /// Release notes + page URL for a given display version ("v1.3.0"), or null when the tag
+    /// doesn't exist / the network is down. Used by the post-update "What's new" window.
+    /// </summary>
+    public static async Task<(string Notes, string PageUrl)?> GetReleaseNotesAsync(string versionText)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("RobloxAccountManager");
+            using var resp = await http.GetAsync(
+                    "https://api.github.com/repos/Vaelixx/Roblox-Account-Manager/releases/tags/" + versionText)
+                .ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return null;
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync().ConfigureAwait(false));
+            var root = doc.RootElement;
+            string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+            string url = root.TryGetProperty("html_url", out var u) ? u.GetString() ?? "" : "";
+            return (notes, url);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[UpdateService] Release notes fetch failed: {ex.Message}");
+            return null;
         }
     }
 

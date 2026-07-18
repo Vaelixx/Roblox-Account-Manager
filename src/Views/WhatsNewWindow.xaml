@@ -1,0 +1,65 @@
+<Window x:Class="RobloxAccountManager.Views.WhatsNewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="What's new"
+        Icon="pack://application:,,,/Assets/app.ico"
+        Width="560" Height="480"
+        WindowStyle="None" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{DynamicResource CanvasBrush}"
+        TextElement.Foreground="{DynamicResource TextPrimaryBrush}"
+        FontFamily="{StaticResource UiFont}"
+        TextOptions.TextFormattingMode="Ideal"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Border Background="{DynamicResource WindowBackdropBrush}"
+            BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1">
+        <Grid Margin="28,24,28,22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="7" Height="7" Fill="{DynamicResource SuccessBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="What's new" Margin="9,0,0,0" VerticalAlignment="Center"
+                               FontFamily="{StaticResource DisplayFont}" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                </StackPanel>
+                <Border CornerRadius="999" Padding="10,3" HorizontalAlignment="Right"
+                        Background="{DynamicResource SurfaceAltBrush}"
+                        BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="1">
+                    <TextBlock x:Name="VersionChip" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                </Border>
+            </Grid>
+
+            <TextBlock Grid.Row="1" Margin="0,8,0,12" FontSize="11"
+                       Text="The update was installed successfully. Here's what changed:"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+
+            <!-- Release notes -->
+            <Border Grid.Row="2" CornerRadius="10"
+                    Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,10">
+                    <StackPanel x:Name="NotesPanel" Margin="0,0,6,4" />
+                </ScrollViewer>
+            </Border>
+
+            <!-- Footer -->
+            <Grid Grid.Row="3" Margin="0,16,0,0">
+                <Button Style="{StaticResource GhostButton}" Content="View on GitHub ↗"
+                        HorizontalAlignment="Left" Click="ViewOnGitHub_Click" />
+                <Button Style="{StaticResource PrimaryButton}" Content="Close"
+                        HorizontalAlignment="Right" Click="Close_Click" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
