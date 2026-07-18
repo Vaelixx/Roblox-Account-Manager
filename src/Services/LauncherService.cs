@@ -158,6 +158,11 @@ public static class LauncherService
                 await Task.Delay(4000);
                 RememberNewest(acc);
                 try { ProcessRegistry.RegisterNewest(acc, placeId, jobId); } catch { }
+                // Presence flips to "In Game" server-side a few seconds after join —
+                // poll right away and once more shortly after so the dashboard catches it fast.
+                try { await PresenceService.PollNowAsync(); } catch { }
+                await Task.Delay(6000);
+                try { await PresenceService.PollNowAsync(); } catch { }
             });
 
             try { PluginService.RaiseLaunched(acc, placeId, jobId); } catch { }
@@ -196,6 +201,11 @@ public static class LauncherService
         {
             Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
             acc.LastUse = DateTime.Now;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(5000);
+                try { await PresenceService.PollNowAsync(); } catch { }
+            });
             if (SettingsService.Current.ToastOnLaunch)
                 ToastService.Success("Launched", $"{acc.DisplayNameOrUser} is starting up.");
             return LaunchResult.Ok();

@@ -34,9 +34,9 @@ public static class PresenceService
             Stop();
             if (!SettingsService.Current.ShowPresence) return;
 
-            int secs = Math.Max(10, SettingsService.Current.PresencePollSeconds);
+            int secs = Math.Max(5, SettingsService.Current.PresencePollSeconds);
             _timer = new Timer(_ => _ = TickAsync(), null,
-                               TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(secs));
+                               TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(secs));
         }
     }
 

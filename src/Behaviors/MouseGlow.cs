@@ -79,13 +79,13 @@ public static class MouseGlow
         private Point _p;
 
         /// <summary>Pointer distance to a border at which the rim starts to light up.</summary>
-        private const double Reach = 150;
+        private const double Reach = 100;
 
         /// <summary>How far the frosted light is allowed to bleed inward from the border.</summary>
-        private const double BandDepth = 36;
+        private const double BandDepth = 16;
 
         /// <summary>Radius of the light pool that hugs the rim.</summary>
-        private const double PoolRadius = 200;
+        private const double PoolRadius = 110;
 
         public GlowAdorner(UIElement adorned) : base(adorned)
         {
@@ -143,9 +143,9 @@ public static class MouseGlow
                 RadiusY        = PoolRadius,
                 GradientStops  =
                 {
-                    new GradientStop(Color.FromArgb((byte)(120 * t), 255, 255, 255), 0),
-                    new GradientStop(Color.FromArgb((byte)(64  * t), icy.R, icy.G, icy.B), 0.30),
-                    new GradientStop(Color.FromArgb((byte)(22  * t), icy.R, icy.G, icy.B), 0.62),
+                    new GradientStop(Color.FromArgb((byte)(96 * t), 255, 255, 255), 0),
+                    new GradientStop(Color.FromArgb((byte)(48 * t), icy.R, icy.G, icy.B), 0.30),
+                    new GradientStop(Color.FromArgb((byte)(16 * t), icy.R, icy.G, icy.B), 0.62),
                     new GradientStop(Color.FromArgb(0,               icy.R, icy.G, icy.B), 1),
                 }
             };

@@ -2,15 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Forms;
+using System.Windows.Interop;
 using RobloxAccountManager.Models;
 
 namespace RobloxAccountManager.Services;
 
 /// <summary>
 /// Registers system-wide hotkeys (Win32 RegisterHotKey) and dispatches each press to
-/// a named power-tool action. A hidden <see cref="NativeWindow"/> owns the hotkeys so
-/// their WM_HOTKEY messages ride the WPF UI-thread pump — meaning handlers already run
+/// a named power-tool action. A hidden message-only window (HwndSource) owns the hotkeys
+/// so their WM_HOTKEY messages ride the WPF UI-thread pump — meaning handlers already run
 /// on the Dispatcher and can touch the view-model directly.
 /// </summary>
 public static class HotkeyService
@@ -75,9 +75,7 @@ public static class HotkeyService
         var hWnd = _window.Handle;
         foreach (var id in _actions.Keys) UnregisterHotKey(hWnd, id);
         _actions.Clear();
-        // DestroyHandle (not ReleaseHandle) actually destroys the underlying HWND; a plain
-        // ReleaseHandle only detaches the NativeWindow wrapper and leaks the message window.
-        _window.DestroyHandle();
+        _window.Destroy();
         _window = null;
     }
 
@@ -92,18 +90,39 @@ public static class HotkeyService
         return w;
     }
 
-    /// <summary>Hidden helper window: never shown, just a home for the hotkey messages.</summary>
-    private sealed class MessageWindow : NativeWindow
+    /// <summary>Hidden message-only helper window: never shown, just a home for the hotkey messages.</summary>
+    private sealed class MessageWindow
     {
+        private readonly HwndSource _source;
+
         public event Action<int>? HotkeyPressed;
 
-        public MessageWindow() => CreateHandle(new CreateParams());
+        public IntPtr Handle => _source.Handle;
 
-        protected override void WndProc(ref Message m)
+        public MessageWindow()
         {
-            if (m.Msg == WM_HOTKEY)
-                HotkeyPressed?.Invoke(m.WParam.ToInt32());
-            base.WndProc(ref m);
+            var p = new HwndSourceParameters("RAM.HotkeyWindow")
+            {
+                WindowStyle = 0,
+                ParentWindow = new IntPtr(-3),   // HWND_MESSAGE
+                Width = 0,
+                Height = 0,
+            };
+            _source = new HwndSource(p);
+            _source.AddHook(WndProc);
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_HOTKEY)
+                HotkeyPressed?.Invoke(wParam.ToInt32());
+            return IntPtr.Zero;
+        }
+
+        public void Destroy()
+        {
+            _source.RemoveHook(WndProc);
+            _source.Dispose();   // destroys the underlying HWND
         }
     }
 }

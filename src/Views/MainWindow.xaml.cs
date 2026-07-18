@@ -10,7 +10,7 @@ namespace RobloxAccountManager.Views;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
-    private System.Windows.Forms.NotifyIcon? _tray;
+    private TrayIcon? _tray;
     private bool _reallyClose;
 
     public MainViewModel ViewModel => _vm;
@@ -86,25 +86,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            _tray = new System.Windows.Forms.NotifyIcon
-            {
-                Text = "Roblox Account Manager",
-                Visible = true
-            };
-            try
-            {
-                string exe = System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName!;
-                _tray.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exe);
-            }
-            catch { }
-
-            var menu = new System.Windows.Forms.ContextMenuStrip();
-            menu.Items.Add("Open", null, (_, _) => ShowFromTray());
-            menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-            menu.Items.Add("Exit", null, (_, _) => { _reallyClose = true; Close(); });
-            _tray.ContextMenuStrip = menu;
-
-            _tray.DoubleClick += (_, _) => ShowFromTray();
+            _tray = new TrayIcon(
+                "Roblox Account Manager",
+                onOpen: ShowFromTray,
+                onExit: () => { _reallyClose = true; Close(); });
         }
         catch { _tray = null; }
     }

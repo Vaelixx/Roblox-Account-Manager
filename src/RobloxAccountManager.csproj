@@ -4,7 +4,6 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -12,11 +11,10 @@
     <RootNamespace>RobloxAccountManager</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>1.3.2</Version>
+    <Version>1.3.3</Version>
     <Product>Roblox Account Manager</Product>
     <Company>RAM</Company>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>$(NoWarn);WFAC010</NoWarn>
 
     <!-- Lean runtime: workstation, non-concurrent GC keeps the memory footprint small for a
          mostly-idle desktop/tray app. (InvariantGlobalization is intentionally NOT set — it
@@ -37,11 +35,19 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
-  <!-- WinForms is only used (fully-qualified) for the tray icon; drop its global using so
-       Application / UserControl / MessageBox keep resolving to their WPF types. -->
-  <ItemGroup>
-    <Using Remove="System.Windows.Forms" />
-    <Using Remove="System.Drawing" />
-  </ItemGroup>
+  <!-- SDK gap: the self-contained WindowsDesktop runtime pack is NOT profile-filtered, so a
+       WPF-only app still ships the whole WinForms stack (~23 MB). Nothing here touches
+       WinForms at runtime anymore (tray + hotkeys are native Win32 via HwndSource), so strip
+       it from the publish list before the single-file bundle is assembled. System.Drawing.*
+       and Accessibility stay — WPF interop (PresentationFramework-SystemDrawing) uses them. -->
+  <Target Name="StripWinFormsFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+          Condition="$([System.String]::Copy('%(ResolvedFileToPublish.Filename)').StartsWith('System.Windows.Forms'))
+                     Or '%(ResolvedFileToPublish.Filename)' == 'WindowsFormsIntegration'
+                     Or '%(ResolvedFileToPublish.Filename)' == 'Microsoft.VisualBasic.Forms'
+                     Or '%(ResolvedFileToPublish.Filename)' == 'System.Drawing.Design'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

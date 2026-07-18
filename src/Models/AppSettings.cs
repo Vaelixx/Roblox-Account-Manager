@@ -17,7 +17,7 @@ public class AppSettings
     // ---- Presence / live data ----
     public bool ShowPresence { get; set; } = true;
     public int PresenceUpdateRate { get; set; } = 5;        // minutes
-    public int PresencePollSeconds { get; set; } = 30;      // live dashboard poll cadence (seconds)
+    public int PresencePollSeconds { get; set; } = 10;      // live dashboard poll cadence (seconds)
     public bool ShowThumbnails { get; set; } = true;
     public bool ShowRobux { get; set; } = true;
     public bool TrackEconomy { get; set; } = true;         // collectible RAP + premium membership
