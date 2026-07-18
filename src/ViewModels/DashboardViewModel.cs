@@ -31,6 +31,10 @@ public class DashboardViewModel : ObservableObject
     /// <summary>The shared, observable account collection — rendered as the live list.</summary>
     public ObservableCollection<Account> Accounts => _store.Accounts;
 
+    /// <summary>Mirrors Settings.HideUsernames so the live list can mask names (RefreshMask cross-VM pattern).</summary>
+    public bool MaskUsernames => SettingsService.Current.HideUsernames;
+    public void RefreshMask() => OnPropertyChanged(nameof(MaskUsernames));
+
     private int _total, _online, _inGame, _inStudio, _offline;
     public int Total    { get => _total;    private set => SetField(ref _total, value); }
     public int Online   { get => _online;   private set => SetField(ref _online, value); }

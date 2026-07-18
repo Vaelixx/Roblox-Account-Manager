@@ -39,3 +39,6 @@ icon.png
 
 # Temp release notes
 _relnotes_*.md
+
+# Publish-Output
+publish/

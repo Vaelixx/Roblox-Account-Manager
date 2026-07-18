@@ -128,7 +128,7 @@ public class SettingsViewModel : ObservableObject
     public bool ShowRobux { get => S.ShowRobux; set { S.ShowRobux = value; Persist(); } }
 
     // Interface
-    public bool HideUsernames { get => S.HideUsernames; set { S.HideUsernames = value; Persist(); _main.Accounts.RefreshMask(); } }
+    public bool HideUsernames { get => S.HideUsernames; set { S.HideUsernames = value; Persist(); _main.Accounts.RefreshMask(); _main.Dashboard.RefreshMask(); _main.Friends.RefreshMask(); } }
     public bool MinimizeToTray { get => S.MinimizeToTray; set { S.MinimizeToTray = value; Persist(); } }
 
     // Security

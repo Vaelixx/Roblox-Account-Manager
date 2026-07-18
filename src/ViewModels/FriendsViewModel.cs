@@ -41,6 +41,10 @@ public class FriendsViewModel : ObservableObject
     /// <summary>Search-filtered friends currently shown.</summary>
     public ObservableCollection<Friend> Friends { get; } = new();
 
+    /// <summary>Mirrors Settings.HideUsernames so picker + friend names can mask (RefreshMask cross-VM pattern).</summary>
+    public bool MaskUsernames => SettingsService.Current.HideUsernames;
+    public void RefreshMask() => OnPropertyChanged(nameof(MaskUsernames));
+
     private Account? _selectedAccount;
     public Account? SelectedAccount
     {
