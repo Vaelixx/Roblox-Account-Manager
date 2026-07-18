@@ -29,6 +29,10 @@ public class Account : ObservableObject
     private bool _autoRejoin;
     public bool AutoRejoin { get => _autoRejoin; set => SetField(ref _autoRejoin, value); }
 
+    // Pinned accounts float to the top of their group in the list.
+    private bool _isFavorite;
+    public bool IsFavorite { get => _isFavorite; set => SetField(ref _isFavorite, value); }
+
     private string _alias = "";
     public string Alias
     {

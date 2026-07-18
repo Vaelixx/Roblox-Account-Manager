@@ -138,6 +138,25 @@ public class MaskConverter : IMultiValueConverter
     public object[] ConvertBack(object v, Type[] t, object p, CultureInfo c) => Array.Empty<object>();
 }
 
+/// <summary>Counts how many accounts in a group's Items are currently online (any non-offline presence).</summary>
+public class GroupOnlineCount : IValueConverter
+{
+    public object Convert(object value, Type t, object p, CultureInfo c)
+    {
+        int n = 0;
+        if (value is System.Collections.IEnumerable items)
+            foreach (var o in items)
+                if (o is RobloxAccountManager.Models.Account a &&
+                    a.Presence is "Online" or "In Game" or "In Studio") n++;
+        // With ConverterParameter="vis" the same converter drives the badge's Visibility,
+        // so the header can hide the whole pill when nobody in the group is online.
+        if (p is string s && s == "vis")
+            return n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        return n;
+    }
+    public object ConvertBack(object v, Type t, object p, CultureInfo c) => Binding.DoNothing;
+}
+
 /// <summary>Multiplies a 0..1 fill value by the bound bar width (passed as parameter).</summary>
 public class FillToWidth : IValueConverter
 {

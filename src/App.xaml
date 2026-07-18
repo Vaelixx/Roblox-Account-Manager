@@ -24,6 +24,7 @@
             <mvvm:CountToVis x:Key="CountNonZeroToVis" WhenZero="False" />
             <mvvm:FillToWidth x:Key="FillToWidth" />
             <mvvm:MaskConverter x:Key="MaskConverter" />
+            <mvvm:GroupOnlineCount x:Key="GroupOnlineCount" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

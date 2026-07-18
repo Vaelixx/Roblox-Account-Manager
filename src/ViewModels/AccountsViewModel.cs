@@ -234,6 +234,7 @@ public class AccountsViewModel : ObservableObject
     public AsyncRelayCommand FollowCommand { get; }
     public AsyncRelayCommand RefreshAllCommand { get; }
     public RelayCommand CopyCookieCommand { get; }
+    public RelayCommand ToggleFavoriteCommand { get; }
     public RelayCommand SaveDetailsCommand { get; }
     public RelayCommand SetGroupCommand { get; }
     public RelayCommand BrowseServersCommand { get; }
@@ -269,6 +270,7 @@ public class AccountsViewModel : ObservableObject
         FollowCommand = new AsyncRelayCommand(p => FollowAsync(p as IList));
         RefreshAllCommand = new AsyncRelayCommand(RefreshAllAsync);
         CopyCookieCommand = new RelayCommand(_ => CopyCookie());
+        ToggleFavoriteCommand = new RelayCommand(p => ToggleFavorite(p as Account));
         SaveDetailsCommand = new RelayCommand(_ => SaveDetails());
         SetGroupCommand = new RelayCommand(p => SetGroup(p as IList));
         BrowseServersCommand = new RelayCommand(_ => BrowseServers());
@@ -654,6 +656,23 @@ public class AccountsViewModel : ObservableObject
     {
         _store.Save();
         _main.SetStatus("Saved.");
+    }
+
+    private void ToggleFavorite(Account? acc)
+    {
+        acc ??= _selected;
+        if (acc == null) { _main.SetStatus("Select an account first."); return; }
+        acc.IsFavorite = !acc.IsFavorite;
+        // Remove + re-add so the grouped/sorted CollectionView floats favorites to the top.
+        int idx = _store.Accounts.IndexOf(acc);
+        if (idx >= 0)
+        {
+            _store.Accounts.RemoveAt(idx);
+            _store.Accounts.Add(acc);
+        }
+        Selected = acc;
+        _store.Save();
+        _main.SetStatus(acc.IsFavorite ? $"Pinned {acc.DisplayNameOrUser}." : $"Unpinned {acc.DisplayNameOrUser}.");
     }
 
     private void SetGroup(IList? list)

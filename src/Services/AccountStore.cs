@@ -95,6 +95,7 @@ public class AccountStore
         public string ProxyUrl { get; set; } = "";
         public string FFlags { get; set; } = "";
         public bool AutoRejoin { get; set; }
+        public bool IsFavorite { get; set; }
 
         public static Persisted FromAccount(Account a) => new()
         {
@@ -111,7 +112,8 @@ public class AccountStore
             TotpSecret = Crypto.ProtectString(a.TotpSecret),
             ProxyUrl = a.ProxyUrl,
             FFlags = a.FFlags,
-            AutoRejoin = a.AutoRejoin
+            AutoRejoin = a.AutoRejoin,
+            IsFavorite = a.IsFavorite
         };
 
         public Account ToAccount() => new()
@@ -129,7 +131,8 @@ public class AccountStore
             TotpSecret = Crypto.UnprotectString(TotpSecret),
             ProxyUrl = ProxyUrl ?? "",
             FFlags = FFlags ?? "",
-            AutoRejoin = AutoRejoin
+            AutoRejoin = AutoRejoin,
+            IsFavorite = IsFavorite
         };
     }
 
