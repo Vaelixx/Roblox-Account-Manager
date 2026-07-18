@@ -245,6 +245,6 @@ public static class WebApiService
         ctx.Response.ContentType = "application/json";
         ctx.Response.ContentLength64 = bytes.Length;
         await ctx.Response.OutputStream.WriteAsync(bytes);
-        ctx.Response.OutputStream.Close();
+        ctx.Response.Close();   // closes the stream AND releases the HttpListener response
     }
 }

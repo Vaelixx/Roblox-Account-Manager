@@ -54,7 +54,20 @@ public static class BrowserService
                 Arguments = $"--user-data-dir=\"{profileDir}\" --remote-debugging-port={port} "
                           + "--no-first-run --no-default-browser-check --new-window about:blank"
             };
-            Process.Start(psi);
+            var proc = Process.Start(psi);
+
+            // Privacy: the profile must never outlive the browser session. The moment the
+            // browser closes, the whole profile folder (cookie DB, site storage, cache) is
+            // wiped so nothing readable stays on disk.
+            if (proc != null)
+            {
+                try
+                {
+                    proc.EnableRaisingEvents = true;
+                    proc.Exited += (_, _) => { WipeProfileWithRetry(profileDir); proc.Dispose(); };
+                }
+                catch { /* exit hook is best-effort; startup/exit cleanup still covers it */ }
+            }
 
             string? wsUrl = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(15));
             if (wsUrl == null)
@@ -68,6 +81,75 @@ public static class BrowserService
         {
             return new(false, $"Couldn't open CloakBrowser: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Deletes leftover app-browser profiles under data/browser. Runs at app start and exit so
+    /// no cookie/site data from a previous session stays readable on disk (crash leftovers and
+    /// profiles written by older versions that still used persistent cookies). A profile whose
+    /// browser is still running keeps its files locked — it is skipped and caught next start.
+    /// </summary>
+    public static void CleanupLeftoverProfiles()
+    {
+        try
+        {
+            string root = Paths.InData("browser");
+            if (!Directory.Exists(root)) return;
+            foreach (string dir in Directory.GetDirectories(root))
+            {
+                try { Directory.Delete(dir, true); }
+                catch { WipeSensitiveFiles(dir); }
+            }
+        }
+        catch { }
+    }
+
+    private static void WipeProfileWithRetry(string dir)
+    {
+        _ = Task.Run(async () =>
+        {
+            // The browser can hold file locks for a moment after its main process exits.
+            for (int attempt = 0; attempt < 6; attempt++)
+            {
+                try
+                {
+                    if (!Directory.Exists(dir)) return;
+                    Directory.Delete(dir, true);
+                    return;
+                }
+                catch { await Task.Delay(500); }
+            }
+            WipeSensitiveFiles(dir); // last resort: at least nothing credential-bearing stays
+        });
+    }
+
+    /// <summary>Best-effort wipe of everything credential-bearing inside a (possibly locked) profile.</summary>
+    private static void WipeSensitiveFiles(string dir)
+    {
+        try
+        {
+            if (!Directory.Exists(dir)) return;
+
+            string[] sensitive = { "Cookies", "Login Data", "Web Data", "History",
+                                   "Network Persistent State", "TransportSecurity", "Trust Tokens" };
+            foreach (string file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                string name = Path.GetFileName(file);
+                if (sensitive.Any(s => name.StartsWith(s, StringComparison.OrdinalIgnoreCase)))
+                {
+                    try { File.Delete(file); } catch { }
+                }
+            }
+
+            foreach (string sub in new[] { "Sessions", "Session Storage", "Local Storage", "IndexedDB" })
+            {
+                foreach (string d in Directory.EnumerateDirectories(dir, sub, SearchOption.AllDirectories).ToList())
+                {
+                    try { Directory.Delete(d, true); } catch { }
+                }
+            }
+        }
+        catch { }
     }
 
     private static int FreePort()
@@ -109,6 +191,9 @@ public static class BrowserService
         await socket.ConnectAsync(new Uri(wsUrl), CancellationToken.None);
 
         await SendAsync(socket, 1, "Network.enable", new { });
+        // No "expires" on purpose: that makes it a session cookie, which lives in browser
+        // memory only and dies with the window — it is never persisted into the profile's
+        // cookie database where it would sit readable on disk.
         await SendAsync(socket, 2, "Network.setCookie", new
         {
             name = ".ROBLOSECURITY",
@@ -116,8 +201,7 @@ public static class BrowserService
             domain = ".roblox.com",
             path = "/",
             secure = true,
-            httpOnly = true,
-            expires = 4102444800.0 // year 2100
+            httpOnly = true
         });
         await SendAsync(socket, 3, "Page.navigate", new { url = "https://www.roblox.com/home" });
 

@@ -56,7 +56,7 @@ public static class RobloxApi
     {
         try
         {
-            var resp = await Http.SendAsync(Build(HttpMethod.Get, "https://users.roblox.com/v1/users/authenticated", cookie));
+            using var resp = await Http.SendAsync(Build(HttpMethod.Get, "https://users.roblox.com/v1/users/authenticated", cookie));
             if (!resp.IsSuccessStatusCode) return null;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             var root = doc.RootElement;
@@ -75,7 +75,7 @@ public static class RobloxApi
     {
         try
         {
-            var resp = await Http.SendAsync(Build(HttpMethod.Post, "https://auth.roblox.com/v1/authentication-ticket", cookie,
+            using var resp = await Http.SendAsync(Build(HttpMethod.Post, "https://auth.roblox.com/v1/authentication-ticket", cookie,
                 referer: "https://www.roblox.com/"));
             if (resp.Headers.TryGetValues("x-csrf-token", out var vals))
                 return vals.FirstOrDefault();
@@ -130,7 +130,7 @@ public static class RobloxApi
                 req.Headers.TryAddWithoutValidation("RBXAuthenticationNegotiation", "1");
                 req.Headers.TryAddWithoutValidation("Origin", "https://www.roblox.com");
 
-                var resp = await Http.SendAsync(req);
+                using var resp = await Http.SendAsync(req);
 
                 if (resp.Headers.TryGetValues("rbx-authentication-ticket", out var t))
                 {
@@ -163,7 +163,7 @@ public static class RobloxApi
     {
         try
         {
-            var resp = await Http.SendAsync(Build(HttpMethod.Get, "https://economy.roblox.com/v1/user/currency", cookie));
+            using var resp = await Http.SendAsync(Build(HttpMethod.Get, "https://economy.roblox.com/v1/user/currency", cookie));
             if (!resp.IsSuccessStatusCode) return -1;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             return doc.RootElement.GetProperty("robux").GetInt64();
@@ -187,7 +187,7 @@ public static class RobloxApi
             {
                 string url = $"https://inventory.roblox.com/v1/users/{userId}/assets/collectibles?limit=100&sortOrder=Asc";
                 if (!string.IsNullOrEmpty(cursor)) url += $"&cursor={Uri.EscapeDataString(cursor)}";
-                var resp = await Http.SendAsync(Build(HttpMethod.Get, url, cookie));
+                using var resp = await Http.SendAsync(Build(HttpMethod.Get, url, cookie));
                 if (!resp.IsSuccessStatusCode) { if (page == 0) return (-1, 0); break; }
                 using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
                 var root = doc.RootElement;
@@ -211,7 +211,7 @@ public static class RobloxApi
     {
         try
         {
-            var resp = await Http.SendAsync(Build(HttpMethod.Get,
+            using var resp = await Http.SendAsync(Build(HttpMethod.Get,
                 $"https://premiumfeatures.roblox.com/v1/users/{userId}/validate-membership", cookie));
             if (!resp.IsSuccessStatusCode) return false;
             var body = (await resp.Content.ReadAsStringAsync()).Trim();
@@ -231,7 +231,7 @@ public static class RobloxApi
 
         try
         {
-            var resp = await Http.SendAsync(Build(HttpMethod.Post, "https://presence.roblox.com/v1/presence/users", cookie,
+            using var resp = await Http.SendAsync(Build(HttpMethod.Post, "https://presence.roblox.com/v1/presence/users", cookie,
                 content: Json(new { userIds = ids })));
             if (!resp.IsSuccessStatusCode) return result;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
@@ -259,7 +259,7 @@ public static class RobloxApi
         if (userId <= 0) return result;
         try
         {
-            var resp = await Http.SendAsync(Build(HttpMethod.Get,
+            using var resp = await Http.SendAsync(Build(HttpMethod.Get,
                 $"https://friends.roblox.com/v1/users/{userId}/friends", cookie));
             if (!resp.IsSuccessStatusCode) return result;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
@@ -313,7 +313,7 @@ public static class RobloxApi
         if (ids.Length == 0) return result;
         try
         {
-            var resp = await Http.SendAsync(Build(HttpMethod.Post,
+            using var resp = await Http.SendAsync(Build(HttpMethod.Post,
                 "https://users.roblox.com/v1/users", "",
                 content: Json(new { userIds = ids, excludeBannedUsers = false })));
             if (!resp.IsSuccessStatusCode) return result;
@@ -344,7 +344,7 @@ public static class RobloxApi
         if (ids.Length == 0) return result;
         try
         {
-            var resp = await Http.SendAsync(Build(HttpMethod.Post, "https://presence.roblox.com/v1/presence/users", cookie,
+            using var resp = await Http.SendAsync(Build(HttpMethod.Post, "https://presence.roblox.com/v1/presence/users", cookie,
                 content: Json(new { userIds = ids })));
             if (!resp.IsSuccessStatusCode) return result;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
@@ -377,7 +377,7 @@ public static class RobloxApi
         try
         {
             string url = $"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={string.Join(",", ids)}&size=150x150&format=Png&isCircular=false";
-            var resp = await Http.GetAsync(url);
+            using var resp = await Http.GetAsync(url);
             if (!resp.IsSuccessStatusCode) return result;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             foreach (var t in doc.RootElement.GetProperty("data").EnumerateArray())
@@ -399,7 +399,7 @@ public static class RobloxApi
         try
         {
             var content = Json(new { usernames = new[] { username }, excludeBannedUsers = false });
-            var resp = await Http.PostAsync("https://users.roblox.com/v1/usernames/users", content);
+            using var resp = await Http.PostAsync("https://users.roblox.com/v1/usernames/users", content);
             if (!resp.IsSuccessStatusCode) return -1;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             var data = doc.RootElement.GetProperty("data");
@@ -423,13 +423,13 @@ public static class RobloxApi
         try
         {
             // placeId -> universeId
-            var uResp = await Http.SendAsync(Build(HttpMethod.Get,
+            using var uResp = await Http.SendAsync(Build(HttpMethod.Get,
                 $"https://apis.roblox.com/universes/v1/places/{placeId}/universe", cookie));
             if (!uResp.IsSuccessStatusCode) return null;
             using var uDoc = JsonDocument.Parse(await uResp.Content.ReadAsStringAsync());
             long universeId = uDoc.RootElement.GetProperty("universeId").GetInt64();
 
-            var gResp = await Http.SendAsync(Build(HttpMethod.Get,
+            using var gResp = await Http.SendAsync(Build(HttpMethod.Get,
                 $"https://games.roblox.com/v1/games?universeIds={universeId}", cookie));
             if (!gResp.IsSuccessStatusCode) return new PlaceInfo(placeId, universeId, $"Place {placeId}", "", 0);
             using var gDoc = JsonDocument.Parse(await gResp.Content.ReadAsStringAsync());
@@ -452,7 +452,7 @@ public static class RobloxApi
         try
         {
             string url = $"https://thumbnails.roblox.com/v1/games/icons?universeIds={universeId}&size=150x150&format=Png&isCircular=false";
-            var resp = await Http.GetAsync(url);
+            using var resp = await Http.GetAsync(url);
             if (!resp.IsSuccessStatusCode) return null;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             var data = doc.RootElement.GetProperty("data");
@@ -511,7 +511,7 @@ public static class RobloxApi
                 var req = Build(HttpMethod.Post, "https://apis.roblox.com/sharelinks/v1/resolve-link",
                     cookie, csrf, content: Json(new { linkId = shareCode, linkType = "Server" }),
                     referer: "https://www.roblox.com/");
-                var resp = await Http.SendAsync(req);
+                using var resp = await Http.SendAsync(req);
 
                 if (resp.StatusCode == HttpStatusCode.Forbidden &&
                     resp.Headers.TryGetValues("x-csrf-token", out var nt))
@@ -545,7 +545,7 @@ public static class RobloxApi
             {
                 string url = $"https://games.roblox.com/v1/games/{placeId}/servers/Public?sortOrder=Asc&limit=100"
                              + (string.IsNullOrEmpty(cursor) ? "" : $"&cursor={cursor}");
-                var resp = await Http.GetAsync(url);
+                using var resp = await Http.GetAsync(url);
                 if (!resp.IsSuccessStatusCode) break;
                 using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
                 var root = doc.RootElement;

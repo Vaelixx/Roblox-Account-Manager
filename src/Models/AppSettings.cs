@@ -28,6 +28,7 @@ public class AppSettings
     public string AccentColor { get; set; } = "#7B61FF";
     public int MaxRecentGames { get; set; } = 12;
     public string LastSeenVersion { get; set; } = "";       // last version the "What's new" window ran for
+    public string UpdateNotesSeenFor { get; set; } = "";    // one-shot: version whose notes the update prompt already showed
 
     // ---- Appearance (#30 UX-Politur: Theme-Editor / Views / i18n / Notif) ----
     public string ThemeName { get; set; } = "Avallon (mono)";          // built-in preset name

@@ -182,7 +182,13 @@ public class MainViewModel : ObservableObject
             return; // "Later" — keep the pill, do nothing
 
         if (UpdateService.BeginUpdate(info))
+        {
+            // The prompt already showed this version's notes — flag it so the post-update
+            // "What's new" window doesn't repeat the same changelog after the restart.
+            SettingsService.Current.UpdateNotesSeenFor = info.VersionText;
+            SettingsService.Save();
             Application.Current?.Shutdown();
+        }
         else
             SetStatus("Update could not be started — please try again later.");
     }
@@ -198,12 +204,25 @@ public class MainViewModel : ObservableObject
         {
             var s = SettingsService.Current;
             string current = UpdateService.CurrentVersionText;
-            if (s.LastSeenVersion == current) return;
+
+            // One-shot flag set by the update prompt: its dialog already displayed this
+            // version's release notes right before the download, so showing the same
+            // changelog again here would be a duplicate. A stale flag (aborted/failed
+            // update, current version differs) is simply cleared.
+            bool seenInPrompt = s.UpdateNotesSeenFor == current;
+            bool flagWasSet = s.UpdateNotesSeenFor.Length > 0;
+            if (flagWasSet) s.UpdateNotesSeenFor = "";
+
+            if (s.LastSeenVersion == current)
+            {
+                if (flagWasSet) SettingsService.Save();
+                return;
+            }
 
             bool firstInstall = string.IsNullOrEmpty(s.LastSeenVersion);
             s.LastSeenVersion = current;
             SettingsService.Save();
-            if (firstInstall) return;
+            if (firstInstall || seenInPrompt) return;
 
             var notes = await UpdateService.GetReleaseNotesAsync(current).ConfigureAwait(false);
             var dispatcher = Application.Current?.Dispatcher;

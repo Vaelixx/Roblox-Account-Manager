@@ -48,6 +48,21 @@ public partial class App : Application
         }
 
         DispatcherUnhandledException += OnUnhandledException;
+
+        // Fire-and-forget tasks (pollers, CLI forwarding, cookie validation, ...) log here
+        // instead of dying silently when their async setup throws before the inner try/catch.
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, ev) =>
+        {
+            try
+            {
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(AppContext.BaseDirectory, "error.log"),
+                    $"{Environment.NewLine}[unobserved task] {ev.Exception}");
+            }
+            catch { }
+            ev.SetObserved();   // never escalate: these are background helpers, not fatal
+        };
+
         base.OnStartup(e);
 
         SettingsService.Load();
@@ -76,6 +91,10 @@ public partial class App : Application
 
         if (updateTempDir != null)
             _ = Task.Run(() => CleanupUpdateDirAsync(updateTempDir));
+
+        // Privacy sweep: remove app-browser profiles a crash or forced shutdown left behind,
+        // so no cookie/site data from a previous session stays readable on disk.
+        _ = Task.Run(BrowserService.CleanupLeftoverProfiles);
     }
 
     /// <summary>
@@ -232,6 +251,7 @@ public partial class App : Application
         HotkeyService.Stop();
         PluginService.Unload(); // let plugins release timers/sockets (may still Close() clients)
         LauncherService.ReleaseMultiInstance();
+        BrowserService.CleanupLeftoverProfiles(); // still-open browsers keep locks; next start re-sweeps
         base.OnExit(e);
     }
 }
