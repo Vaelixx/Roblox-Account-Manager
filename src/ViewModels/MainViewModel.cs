@@ -182,7 +182,7 @@ public class MainViewModel : ObservableObject
             return; // "Later" — keep the pill, do nothing
 
         if (UpdateService.BeginUpdate(info))
-            Application.Current.Shutdown();
+            Application.Current?.Shutdown();
         else
             SetStatus("Update could not be started — please try again later.");
     }
