@@ -65,7 +65,24 @@ public class SettingsViewModel : ObservableObject
         ReloadPluginsCommand = new RelayCommand(_ => ReloadPlugins());
         ResetThemeCommand = new RelayCommand(_ => ResetTheme());
         TestWebhookCommand = new RelayCommand(_ => TestWebhook());
+        FixMultiInstanceCommand = new RelayCommand(_ => FixMultiInstance());
+        RestartElevatedCommand = new RelayCommand(_ => RestartElevated());
+        RunHealthCheckCommand = new RelayCommand(_ => RunHealthCheck());
+        OpenDiagnosticsCommand = new RelayCommand(_ => DiagnosticsService.OpenLogFolder());
+        ClearDiagnosticsCommand = new RelayCommand(_ =>
+        {
+            DiagnosticsService.Clear();
+            OnPropertyChanged(nameof(DiagnosticsStatus));
+            _main.SetStatus("Diagnostics log cleared.");
+        });
+        ArrangeWindowsCommand = new RelayCommand(_ => ReportClientAction(InstanceControlService.ArrangeGrid(), "arranged"));
+        MinimizeClientsCommand = new RelayCommand(_ => ReportClientAction(InstanceControlService.MinimizeAll(), "minimized"));
+        RestoreClientsCommand = new RelayCommand(_ => ReportClientAction(InstanceControlService.RestoreAll(), "restored"));
         BuildThemeRows();
+
+        // The guard reports asynchronously (its watcher runs on a timer); mirror that into the
+        // settings page so the status line is live instead of a snapshot from page load.
+        RobloxSingletonService.StatusChanged += RefreshSingletonState;
     }
 
     // ---- Discord webhook ----
@@ -111,7 +128,67 @@ public class SettingsViewModel : ObservableObject
     public bool EnableMultiInstance
     {
         get => S.EnableMultiInstance;
-        set { S.EnableMultiInstance = value; Persist(); LauncherService.EnsureMultiInstance(value); }
+        set { S.EnableMultiInstance = value; Persist(); LauncherService.EnsureMultiInstance(value); RefreshSingletonState(); }
+    }
+
+    /// <summary>
+    /// Clears Roblox's per-client singleton lock so launches started outside the manager
+    /// (website, home screen, invites) open their own window instead of hijacking a running one.
+    /// </summary>
+    public bool CloseSingletonEvent
+    {
+        get => S.CloseSingletonEvent;
+        set { S.CloseSingletonEvent = value; Persist(); RobloxSingletonService.Apply(); RefreshSingletonState(); }
+    }
+
+    public bool AdoptExternalClients
+    {
+        get => S.AdoptExternalClients;
+        set { S.AdoptExternalClients = value; Persist(); }
+    }
+
+    public string MultiInstanceStatus => RobloxSingletonService.StatusText;
+
+    /// <summary>Only offer the UAC route when elevation would actually change the outcome.</summary>
+    public bool ShowElevatePrompt => RobloxSingletonService.AccessDenied && !RobloxSingletonService.IsElevated;
+
+    public RelayCommand FixMultiInstanceCommand { get; private set; } = null!;
+    public RelayCommand RestartElevatedCommand { get; private set; } = null!;
+
+    private void FixMultiInstance()
+    {
+        RobloxSingletonService.SweepNow(out string message);
+        _main.SetStatus(message);
+        RefreshSingletonState();
+    }
+
+    private void RestartElevated()
+    {
+        if (RobloxSingletonService.IsElevated) { _main.SetStatus("Already running as administrator."); return; }
+
+        if (!DialogService.Confirm("Restart as administrator",
+            "The manager will close and reopen with administrator rights so it can unlock Roblox "
+            + "for additional clients. Continue?")) return;
+
+        if (RobloxSingletonService.RestartElevated())
+            System.Windows.Application.Current?.Shutdown();
+        else
+            _main.SetStatus("Restart cancelled — administrator rights were not granted.");
+    }
+
+    /// <summary>
+    /// The guard reports from a background timer, so hop to the UI thread before raising
+    /// change notifications — WPF bindings must not be poked from a Timer callback.
+    /// </summary>
+    private void RefreshSingletonState()
+    {
+        var app = System.Windows.Application.Current;
+        if (app?.Dispatcher == null) return;
+        app.Dispatcher.BeginInvoke(new System.Action(() =>
+        {
+            OnPropertyChanged(nameof(MultiInstanceStatus));
+            OnPropertyChanged(nameof(ShowElevatePrompt));
+        }));
     }
     public bool AutoCloseLastProcess { get => S.AutoCloseLastProcess; set { S.AutoCloseLastProcess = value; Persist(); } }
     public int AccountJoinDelay { get => S.AccountJoinDelay; set { S.AccountJoinDelay = value; Persist(); } }
@@ -157,6 +234,69 @@ public class SettingsViewModel : ObservableObject
     public RelayCommand ReloadPluginsCommand { get; }
 
     public string AppVersion => AppInfo.Long;
+
+    // ---- Diagnostics / self-check / running clients ----
+
+    public ObservableCollection<HealthCheckService.Check> HealthChecks { get; } = new();
+
+    private bool _healthRunning;
+    public bool HealthRunning { get => _healthRunning; private set => SetField(ref _healthRunning, value); }
+
+    public string DiagnosticsStatus
+    {
+        get
+        {
+            int errors = DiagnosticsService.ErrorCount;
+            int clients = InstanceControlService.Count;
+            string errorPart = errors == 0 ? "No errors recorded this session." : $"{errors} error(s) recorded this session.";
+            return $"{errorPart}  {clients} Roblox client(s) tracked.";
+        }
+    }
+
+    public RelayCommand RunHealthCheckCommand { get; private set; } = null!;
+    public RelayCommand OpenDiagnosticsCommand { get; private set; } = null!;
+    public RelayCommand ClearDiagnosticsCommand { get; private set; } = null!;
+    public RelayCommand ArrangeWindowsCommand { get; private set; } = null!;
+    public RelayCommand MinimizeClientsCommand { get; private set; } = null!;
+    public RelayCommand RestoreClientsCommand { get; private set; } = null!;
+
+    /// <summary>Reports a window action, including the "nothing happened" case — a silently
+    /// no-op button reads as broken.</summary>
+    private void ReportClientAction(int affected, string verb)
+    {
+        _main.SetStatus(affected > 0
+            ? $"{affected} Roblox window(s) {verb}."
+            : "No Roblox client windows are open yet.");
+        OnPropertyChanged(nameof(DiagnosticsStatus));
+    }
+
+    private async void RunHealthCheck()
+    {
+        if (HealthRunning) return;   // the button stays clickable; don't stack runs
+        HealthRunning = true;
+        _main.SetStatus("Running self-check…");
+        try
+        {
+            var results = await HealthCheckService.RunAsync();
+            HealthChecks.Clear();
+            foreach (var c in results) HealthChecks.Add(c);
+            int failed = results.Count(c => !c.Ok);
+            _main.SetStatus(failed == 0
+                ? "Self-check passed — everything looks healthy."
+                : $"Self-check found {failed} problem(s) — see the list above.");
+        }
+        catch (Exception ex)
+        {
+            // async void: an escaping exception would take the whole app down.
+            DiagnosticsService.Error("settings", "Health check failed", ex);
+            _main.SetStatus("Self-check could not be completed.");
+        }
+        finally
+        {
+            HealthRunning = false;
+            OnPropertyChanged(nameof(DiagnosticsStatus));
+        }
+    }
 
     private void Persist() { SettingsService.Save(); OnPropertyChanged(""); }
 

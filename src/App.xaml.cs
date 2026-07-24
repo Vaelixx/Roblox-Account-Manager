@@ -32,6 +32,20 @@ public partial class App : Application
         string? updateTempDir = e.Args.Length >= 2 && e.Args[0] == "--post-update" ? e.Args[1] : null;
 
         _instanceMutex = new Mutex(true, "RobloxAccountManager.Modern.SingleInstance", out bool isNew);
+
+        // "Restart as administrator" hands over to this elevated copy while the old one is still
+        // tearing down. Without a grace period the handover would greet the user with
+        // "already running" and leave them un-elevated — the exact state they tried to escape.
+        if (!isNew && e.Args.Contains("--restart", StringComparer.OrdinalIgnoreCase))
+        {
+            for (int attempt = 0; attempt < 25 && !isNew; attempt++)
+            {
+                Thread.Sleep(400);
+                try { _instanceMutex.Dispose(); } catch { }
+                _instanceMutex = new Mutex(true, "RobloxAccountManager.Modern.SingleInstance", out isNew);
+            }
+        }
+
         if (!isNew)
         {
             // Already running. If we were started to perform an action (e.g. --launch),
@@ -49,19 +63,11 @@ public partial class App : Application
 
         DispatcherUnhandledException += OnUnhandledException;
 
-        // Fire-and-forget tasks (pollers, CLI forwarding, cookie validation, ...) log here
-        // instead of dying silently when their async setup throws before the inner try/catch.
-        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, ev) =>
-        {
-            try
-            {
-                System.IO.File.AppendAllText(
-                    System.IO.Path.Combine(AppContext.BaseDirectory, "error.log"),
-                    $"{Environment.NewLine}[unobserved task] {ev.Exception}");
-            }
-            catch { }
-            ev.SetObserved();   // never escalate: these are background helpers, not fatal
-        };
+        // Central diagnostics sink. Installed before anything else runs so the very first
+        // failure — a corrupt settings file, an unreadable data folder — is already recorded.
+        // It also owns the unobserved-task hook that used to live inline here, so fire-and-forget
+        // pollers land in one rotating, cookie-scrubbed log instead of an ever-growing error.log.
+        DiagnosticsService.Install();
 
         base.OnStartup(e);
 
@@ -104,6 +110,11 @@ public partial class App : Application
     /// </summary>
     private static void WireBackgroundServices(MainViewModel vm)
     {
+        // Multi-instance guard. Started here — not only on the launch path — because the whole
+        // point is that clients we never launch (website Play button, Roblox home screen,
+        // Discord invite) also need Roblox's per-client singleton lock cleared.
+        RobloxSingletonService.Apply();
+
         WatchdogService.Init(userId => vm.Store.Accounts.FirstOrDefault(a => a.UserId == userId));
         WatchdogService.Apply();
         AntiAfkService.Apply();
@@ -214,7 +225,21 @@ public partial class App : Application
 
         if (!store.IsPasswordProtected)
         {
-            store.Load(null);
+            // A store that exists but fails to decrypt must NOT fall through as "no accounts".
+            // The app would come up empty and the first Save() — which OnClosing does
+            // unconditionally — would overwrite the real file and its backup with an empty one.
+            // Refuse to start instead, so the file survives to be recovered.
+            if (!store.Load(null))
+            {
+                DialogService.Info("Account file could not be read",
+                    "Your saved accounts could not be decrypted. That usually means the file was "
+                    + "copied from a different Windows user or PC — DPAPI encryption is tied to the "
+                    + "account that wrote it.\n\n"
+                    + "Nothing has been changed and nothing was deleted. Your file is in:\n"
+                    + Paths.DataDir + "\n\n"
+                    + "The app will close now so the file stays intact.");
+                return false;
+            }
             return true;
         }
 
@@ -233,9 +258,12 @@ public partial class App : Application
 
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        try { System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "error.log"), e.Exception.ToString()); } catch { }
-        MessageBox.Show($"An unexpected error occurred:\n\n{e.Exception.Message}", "Roblox Account Manager",
-            MessageBoxButton.OK, MessageBoxImage.Error);
+        // Append, never overwrite: the old code truncated error.log on every crash, so a repeating
+        // fault destroyed the evidence of the first one.
+        DiagnosticsService.Error("ui", "Unhandled dispatcher exception", e.Exception);
+        MessageBox.Show(
+            $"An unexpected error occurred:\n\n{e.Exception.Message}\n\nDetails were written to:\n{DiagnosticsService.LogPath}",
+            "Roblox Account Manager", MessageBoxButton.OK, MessageBoxImage.Error);
         e.Handled = true;
     }
 

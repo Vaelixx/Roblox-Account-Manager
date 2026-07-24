@@ -74,6 +74,17 @@ public static class AntiAfkService
 
                 Win32.ForceForeground(hWnd);
                 Thread.Sleep(250);                 // let the window actually take focus
+
+                // Windows refuses SetForegroundWindow in plenty of situations (a fullscreen game
+                // elsewhere, a UAC prompt, foreground lock). Sending the key anyway typed
+                // Space / W into whatever the user was actually doing. Skip instead — a missed
+                // anti-AFK tap is recoverable, a keystroke in someone's chat window is not.
+                if (Win32.GetForegroundWindow() != hWnd)
+                {
+                    DiagnosticsService.Warn("anti-afk", $"Skipped {t.Alias}: its window would not take focus");
+                    continue;
+                }
+
                 Win32.TapKey(vk);
                 Thread.Sleep(150);
             }

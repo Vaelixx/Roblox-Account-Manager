@@ -11,7 +11,7 @@
     <RootNamespace>RobloxAccountManager</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>1.3.3</Version>
+    <Version>1.4.0</Version>
     <Product>Roblox Account Manager</Product>
     <Company>RAM</Company>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

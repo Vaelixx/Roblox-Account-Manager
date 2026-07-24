@@ -78,12 +78,18 @@ public static class SchedulerService
         {
             if (task.Action == ScheduleAction.Close)
             {
-                CloseMatching(task);
+                // An explicit "close" task means every client of those accounts, no exclusions —
+                // unlike the auto-close after a launch, which only reclaims what it started.
+                CloseMatching(task, new HashSet<int>());
                 return;
             }
 
             // ---- Launch ----
-            var launchedPids = new List<int>();
+            // Clients that already existed are not this task's to close later. Snapshotting them
+            // here is what makes the auto-close surgical: without it a 20:00 "play for 30 min"
+            // task would, at 20:30, also kill the client the user started by hand at 19:00.
+            var preExisting = new HashSet<int>();
+            foreach (var t in ProcessRegistry.All) preExisting.Add(t.Pid);
 
             if (!string.IsNullOrWhiteSpace(task.PresetName))
             {
@@ -100,35 +106,44 @@ public static class SchedulerService
             // ---- Optional auto-close ----
             if (task.AutoCloseAfterMinutes > 0)
             {
-                _ = AutoCloseLaterAsync(task, TimeSpan.FromMinutes(task.AutoCloseAfterMinutes));
+                _ = AutoCloseLaterAsync(task, TimeSpan.FromMinutes(task.AutoCloseAfterMinutes), preExisting);
             }
         }
         catch { /* a single bad task must not take down the scheduler */ }
     }
 
-    private static async Task AutoCloseLaterAsync(ScheduledTask task, TimeSpan after)
+    private static async Task AutoCloseLaterAsync(ScheduledTask task, TimeSpan after, HashSet<int> preExisting)
     {
         await Task.Delay(after);
-        CloseMatching(task);
+        CloseMatching(task, preExisting);
     }
 
-    /// <summary>Kills tracked clients that belong to the task's target (preset aliases or single alias).</summary>
-    private static void CloseMatching(ScheduledTask task)
+    /// <summary>
+    /// Kills the clients this task started: right account, and not one that was already running
+    /// when the task fired. <paramref name="preExisting"/> is the pid snapshot from launch time.
+    /// </summary>
+    private static void CloseMatching(ScheduledTask task, HashSet<int> preExisting)
     {
         var targetUserIds = ResolveTargetUserIds(task);
         if (targetUserIds.Count == 0) return;
 
+        int closed = 0;
         foreach (var t in ProcessRegistry.All)
         {
             if (!targetUserIds.Contains(t.UserId)) continue;
+            if (preExisting.Contains(t.Pid)) continue;   // was already running — not ours to close
             try
             {
                 using var p = System.Diagnostics.Process.GetProcessById(t.Pid);
                 p.Kill();
                 ProcessRegistry.Forget(t.Pid);
+                closed++;
             }
-            catch { }
+            catch (Exception ex) { DiagnosticsService.Warn("scheduler", $"Auto-close failed for pid {t.Pid}", ex); }
         }
+
+        if (closed > 0)
+            DiagnosticsService.Log("scheduler", $"Auto-closed {closed} client(s) for task '{task.Alias ?? task.PresetName}'");
     }
 
     private static HashSet<long> ResolveTargetUserIds(ScheduledTask task)

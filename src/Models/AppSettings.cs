@@ -4,6 +4,16 @@ public class AppSettings
 {
     // ---- Launch ----
     public bool EnableMultiInstance { get; set; } = true;   // hold ROBLOX_singletonMutex open
+
+    // Newer Roblox clients keep a second guard, ROBLOX_singletonEvent, inside their own process.
+    // Holding the mutex does nothing about it, which is why a launch started from the website or
+    // the Roblox home screen used to be swallowed by the client that was already running.
+    // Closing that handle in every live client makes those launches open a new window too.
+    public bool CloseSingletonEvent { get; set; } = true;
+    public int SingletonWatchSeconds { get; set; } = 2;      // how often new clients are checked
+    public bool AdoptExternalClients { get; set; } = true;   // manage clients started outside the app
+    public bool MultiInstanceStartupCheck { get; set; } = true; // warn once if the guard can't run
+
     public int AccountJoinDelay { get; set; } = 8;          // seconds between sequential launches
     public bool AutoCloseLastProcess { get; set; } = true;  // close the same account's previous client
     public bool ShuffleLowestServer { get; set; } = false;  // "join" picks the emptiest server

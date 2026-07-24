@@ -20,6 +20,37 @@
                     <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
                     <Grid Margin="16,14">
                         <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Unlock launches started outside the app" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Clears Roblox's per-client lock as well, so the Play button on roblox.com, the Roblox home screen and Discord invites open their own client instead of taking over the one already running."
+                                       Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding CloseSingletonEvent}" IsEnabled="{Binding EnableMultiInstance}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
+                            <TextBlock Text="Manage external clients" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Let Anti-AFK, the RAM monitor and the window grid also see clients this app did not launch."
+                                       Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                        </StackPanel>
+                        <CheckBox Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  IsChecked="{Binding AdoptExternalClients}" IsEnabled="{Binding EnableMultiInstance}" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <StackPanel Margin="16,14">
+                        <TextBlock Text="{Binding MultiInstanceStatus}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button Content="Fix multi-instance now" Command="{Binding FixMultiInstanceCommand}"
+                                    Style="{StaticResource GhostButton}" />
+                            <Button Content="Restart as administrator" Command="{Binding RestartElevatedCommand}"
+                                    Style="{StaticResource GhostButton}" Margin="10,0,0,0"
+                                    Visibility="{Binding ShowElevatePrompt, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="16,0" />
+                    <Grid Margin="16,14">
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,120,0">
                             <TextBlock Text="Close previous client" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
                             <TextBlock Text="When relaunching an account, close its earlier window first." Style="{StaticResource Caption}" Margin="0,3,0,0" />
                         </StackPanel>
@@ -351,6 +382,68 @@
                             <TextBlock Text="Remove password" />
                         </Button>
                     </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Diagnostics ===== -->
+            <TextBlock Text="Diagnostics" Style="{StaticResource DisplayText}" FontSize="15" Margin="2,0,0,10" />
+            <Border Style="{StaticResource Card}" Padding="18" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="{Binding DiagnosticsStatus}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+
+                    <ItemsControl ItemsSource="{Binding HealthChecks}" Margin="0,12,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="6" Padding="10,7" Margin="0,0,0,6">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding StatusGlyph}" FontFamily="Consolas" FontWeight="Bold" Width="24">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Ok}" Value="False">
+                                                                <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="24,2,0,0" />
+                                        <TextBlock Text="{Binding Hint}" Foreground="{DynamicResource WarningBrush}" FontSize="11.5"
+                                                   TextWrapping="Wrap" Margin="24,3,0,0"
+                                                   Visibility="{Binding HasHint, Converter={StaticResource BoolToVis}}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <WrapPanel Margin="0,8,0,0">
+                        <Button Style="{StaticResource PrimaryButton}" Command="{Binding RunHealthCheckCommand}"
+                                Content="Run self-check" Width="150" IsEnabled="{Binding HealthRunning, Converter={StaticResource InverseBool}}" />
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding OpenDiagnosticsCommand}" Margin="10,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource Icon.Folder}" Style="{StaticResource IconPath}" Width="15" Height="15" />
+                                <TextBlock Text="Open log folder" Margin="7,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding ClearDiagnosticsCommand}"
+                                Content="Clear log" Margin="10,0,0,0" />
+                    </WrapPanel>
+
+                    <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="0,16,0,14" />
+
+                    <TextBlock Text="Client windows" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <TextBlock Text="Acts on every running Roblox client, including ones started from the website."
+                               Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,10" />
+                    <WrapPanel>
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding ArrangeWindowsCommand}" Content="Arrange in a grid" />
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding MinimizeClientsCommand}" Content="Minimize all" Margin="10,0,0,0" />
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding RestoreClientsCommand}" Content="Restore all" Margin="10,0,0,0" />
+                    </WrapPanel>
                 </StackPanel>
             </Border>
 

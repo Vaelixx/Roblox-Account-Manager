@@ -53,19 +53,33 @@ public static class RobloxApi
     public record PresenceDetail(string Status, string LastLocation, long PlaceId, long RootPlaceId, long UniverseId, string? JobId);
 
     public static async Task<Identity?> GetAuthenticatedUserAsync(string cookie)
+        => (await GetAuthenticatedUserDetailedAsync(cookie)).Identity;
+
+    /// <summary>
+    /// Same lookup as <see cref="GetAuthenticatedUserAsync"/>, but also says whether a null
+    /// result actually <em>proves</em> the cookie is dead.
+    ///
+    /// Only 401/403 mean "this cookie is not accepted". Roblox answers 429 while rate-limiting —
+    /// which is exactly what launching ten accounts in a row provokes — and 5xx when it is having
+    /// a bad day; a DNS hiccup throws instead. Treating any of those as a dead cookie marks
+    /// perfectly good accounts invalid and sends the user off to re-add them for nothing.
+    /// </summary>
+    public static async Task<(Identity? Identity, bool CookieRejected)> GetAuthenticatedUserDetailedAsync(string cookie)
     {
         try
         {
             using var resp = await Http.SendAsync(Build(HttpMethod.Get, "https://users.roblox.com/v1/users/authenticated", cookie));
-            if (!resp.IsSuccessStatusCode) return null;
+            if (!resp.IsSuccessStatusCode)
+                return (null, (int)resp.StatusCode is 401 or 403);
+
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             var root = doc.RootElement;
-            return new Identity(
+            return (new Identity(
                 root.GetProperty("id").GetInt64(),
                 root.GetProperty("name").GetString() ?? "",
-                root.TryGetProperty("displayName", out var dn) ? dn.GetString() ?? "" : "");
+                root.TryGetProperty("displayName", out var dn) ? dn.GetString() ?? "" : ""), false);
         }
-        catch { return null; }
+        catch { return (null, false); }   // transport failure proves nothing about the cookie
     }
 
     // ---------------------------------------------------------------

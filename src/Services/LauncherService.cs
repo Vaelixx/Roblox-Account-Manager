@@ -9,9 +9,6 @@ namespace RobloxAccountManager.Services;
 
 public static class LauncherService
 {
-    // Held open so Roblox's own single-instance check passes for every extra client.
-    private static Mutex? _multiMutex;
-
     // Remembers the last client we spawned per account so we can close it on relaunch.
     // Concurrent because it's written from delayed launch tasks and read/cleared from the
     // UI thread (relaunch) and the global "close all" hotkey — potentially at the same time.
@@ -36,29 +33,18 @@ public static class LauncherService
             $"Cookie rotated for {acc.DisplayNameOrUser} (userId {acc.UserId})");
     }
 
+    /// <summary>
+    /// Brings the multi-instance guard in line with the current settings. Both halves live in
+    /// <see cref="RobloxSingletonService"/> now: the named mutex *and* the per-client singleton
+    /// event that newer Roblox builds use to redirect a second launch into the running window.
+    /// </summary>
     public static void EnsureMultiInstance(bool enabled)
     {
-        if (enabled && _multiMutex == null)
-        {
-            try
-            {
-                _multiMutex = new Mutex(true, "ROBLOX_singletonMutex", out bool created);
-                if (!created) _multiMutex.WaitOne(TimeSpan.Zero);
-            }
-            catch { _multiMutex = null; }
-        }
-        else if (!enabled && _multiMutex != null)
-        {
-            ReleaseMultiInstance();
-        }
+        if (enabled) RobloxSingletonService.Apply();
+        else RobloxSingletonService.Stop();
     }
 
-    public static void ReleaseMultiInstance()
-    {
-        try { _multiMutex?.ReleaseMutex(); } catch { }
-        try { _multiMutex?.Dispose(); } catch { }
-        _multiMutex = null;
-    }
+    public static void ReleaseMultiInstance() => RobloxSingletonService.Stop();
 
     public static string EnsureTrackerId(Account acc)
     {
@@ -91,13 +77,17 @@ public static class LauncherService
         var (ticket, rotated, error) = await RobloxApi.GetAuthTicketDetailedAsync(acc.Cookie);
         if (string.IsNullOrEmpty(ticket))
         {
-            // Distinguish a genuinely dead cookie from a transient ticket failure.
-            var identity = await RobloxApi.GetAuthenticatedUserAsync(acc.Cookie);
-            if (identity == null)
+            // Distinguish a genuinely dead cookie from a transient ticket failure. Only an
+            // outright rejection (401/403) is allowed to mark the account invalid — a 429 from
+            // launching several accounts at once must not condemn them all.
+            var (identity, rejected) = await RobloxApi.GetAuthenticatedUserDetailedAsync(acc.Cookie);
+            if (identity == null && rejected)
             {
                 acc.IsValid = false;
                 return LaunchResult.Fail("This cookie is no longer valid — re-add the account.");
             }
+            if (identity == null)
+                return LaunchResult.Fail($"Couldn't reach Roblox to check the account ({error}). Try again in a moment.");
 
             acc.IsValid = true; // cookie is fine; the ticket call hiccuped
             return LaunchResult.Fail($"Couldn't get a launch ticket ({error}). Cookie is still valid — try again in a moment.");
@@ -146,6 +136,11 @@ public static class LauncherService
 
         try
         {
+            // Anchor for process attribution: only clients that appear *after* this instant can
+            // belong to this launch. Backdated a little because the protocol handler may already
+            // have spawned the client by the time Process.Start returns.
+            DateTime launchedAt = DateTime.Now.AddSeconds(-2);
+
             var psi = new ProcessStartInfo(uri) { UseShellExecute = true };
             Process.Start(psi);
             acc.LastUse = DateTime.Now;
@@ -156,14 +151,14 @@ public static class LauncherService
             _ = Task.Run(async () =>
             {
                 await Task.Delay(4000);
-                RememberNewest(acc);
-                try { ProcessRegistry.RegisterNewest(acc, placeId, jobId); } catch { }
                 // Presence flips to "In Game" server-side a few seconds after join —
                 // poll right away and once more shortly after so the dashboard catches it fast.
                 try { await PresenceService.PollNowAsync(); } catch { }
                 await Task.Delay(6000);
                 try { await PresenceService.PollNowAsync(); } catch { }
             });
+
+            _ = Task.Run(() => AttributeClientAsync(acc, placeId, jobId, launchedAt));
 
             try { PluginService.RaiseLaunched(acc, placeId, jobId); } catch { }
             if (SettingsService.Current.ToastOnLaunch)
@@ -174,9 +169,45 @@ public static class LauncherService
         }
         catch (Exception ex)
         {
-            return LaunchResult.Fail($"Failed to launch Roblox: {ex.Message}");
+            return LaunchResult.Fail(ExplainLaunchFailure(ex));
         }
     }
+
+    /// <summary>
+    /// Binds the client this launch produced to its account, on its own schedule so a slow
+    /// client start never delays the presence refresh.
+    ///
+    /// Retried rather than attempted once: on a cold start (shader cache, a pending Roblox
+    /// update, a slow disk) the client can take far longer than four seconds to exist, and a
+    /// single miss meant it was never tracked at all — no Anti-AFK, no crash watchdog, no RAM
+    /// cap — with nothing anywhere saying so.
+    /// </summary>
+    private static async Task AttributeClientAsync(Account acc, long placeId, string? jobId, DateTime launchedAt)
+    {
+        await Task.Delay(4000);
+
+        int pid = 0;
+        for (int attempt = 0; attempt < 10 && pid == 0; attempt++)
+        {
+            try { pid = ProcessRegistry.RegisterNewest(acc, placeId, jobId, launchedAt); } catch { }
+            if (pid == 0) await Task.Delay(2000);
+        }
+
+        if (pid != 0) _lastProcess[acc.UserId] = pid;
+        else DiagnosticsService.Warn("launcher",
+                $"No client could be attributed to {acc.DisplayNameOrUser} within 24s of launch");
+    }
+
+    /// <summary>
+    /// Turns a Process.Start failure on the <c>roblox-player:</c> URI into something the user can
+    /// act on. The raw message ("The system cannot find the file specified") points at nothing —
+    /// the real cause is almost always a missing or hijacked protocol handler.
+    /// </summary>
+    private static string ExplainLaunchFailure(Exception ex)
+        => ex is System.ComponentModel.Win32Exception or FileNotFoundException
+            ? "Windows could not open the roblox-player link. Roblox is most likely not installed, "
+              + "or another launcher has taken the link over. Open roblox.com and start any game once, then retry."
+            : $"Failed to launch Roblox: {ex.Message}";
 
     /// <summary>Opens the Roblox app itself (home screen), signed in as this account — no game.</summary>
     public static async Task<LaunchResult> OpenRobloxAppAsync(Account acc)
@@ -187,8 +218,8 @@ public static class LauncherService
         var (ticket, rotated, error) = await RobloxApi.GetAuthTicketDetailedAsync(acc.Cookie);
         if (string.IsNullOrEmpty(ticket))
         {
-            var identity = await RobloxApi.GetAuthenticatedUserAsync(acc.Cookie);
-            if (identity == null) { acc.IsValid = false; return LaunchResult.Fail("This cookie is no longer valid — re-add the account."); }
+            var (identity, rejected) = await RobloxApi.GetAuthenticatedUserDetailedAsync(acc.Cookie);
+            if (identity == null && rejected) { acc.IsValid = false; return LaunchResult.Fail("This cookie is no longer valid — re-add the account."); }
             return LaunchResult.Fail($"Couldn't get a launch ticket ({error}). Try again in a moment.");
         }
         PersistRotatedCookie(acc, rotated);
@@ -210,7 +241,7 @@ public static class LauncherService
                 ToastService.Success("Launched", $"{acc.DisplayNameOrUser} is starting up.");
             return LaunchResult.Ok();
         }
-        catch (Exception ex) { return LaunchResult.Fail($"Failed to open Roblox: {ex.Message}"); }
+        catch (Exception ex) { return LaunchResult.Fail(ExplainLaunchFailure(ex)); }
     }
 
     private static void CloseLast(Account acc)
@@ -257,19 +288,6 @@ public static class LauncherService
         }
         _lastProcess.Clear();
         return closed;
-    }
-
-    private static void RememberNewest(Account acc)
-    {
-        var procs = Process.GetProcessesByName("RobloxPlayerBeta");
-        try
-        {
-            var newest = procs.OrderByDescending(p => { try { return p.StartTime; } catch { return DateTime.MinValue; } })
-                .FirstOrDefault();
-            if (newest != null) _lastProcess[acc.UserId] = newest.Id;
-        }
-        catch { }
-        finally { foreach (var p in procs) p.Dispose(); }   // release process handles
     }
 
     private static void TryPatchFps(int fps)

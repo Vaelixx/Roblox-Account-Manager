@@ -73,6 +73,11 @@ public static class WatchdogService
         // (the Exited hook is wired once in Init). Plugins learn the client is gone.
         try { PluginService.RaiseClosed(t.UserId, t.Alias); } catch { }
 
+        // Adopted clients (started from the website / home screen) have no account behind them:
+        // there is no cookie to rejoin with and no alias worth alerting about, so stay quiet
+        // rather than posting "External client crashed (place 0)" to Discord.
+        if (t.IsExternal || t.UserId == 0) return;
+
         var s = SettingsService.Current;
         if (!s.WatchdogEnabled) return;
 
