@@ -11,6 +11,7 @@ namespace RobloxAccountManager.ViewModels;
 public sealed class ClientRow
 {
     public int Pid { get; init; }
+    public ProcessRegistry.ProcessToken Token { get; init; }
     public Account? Account { get; init; }
     public string Name { get; init; } = "";
     public string Detail { get; init; } = "";
@@ -51,8 +52,8 @@ public class DashboardViewModel : ObservableObject
         MinimizeAllCommand = new RelayCommand(_ => Report(InstanceControlService.MinimizeAll(), "Clients.Minimized"));
         RestoreAllCommand = new RelayCommand(_ => Report(InstanceControlService.RestoreAll(), "Clients.Restored"));
         CloseAllCommand = new RelayCommand(_ => CloseAll());
-        FocusClientCommand = new RelayCommand(p => { if (p is int pid && !InstanceControlService.Focus(pid)) _main.SetStatus(L.T("Clients.NoWindow")); });
-        CloseClientCommand = new RelayCommand(p => { if (p is int pid) _ = Task.Run(() => { InstanceControlService.Close(pid); }); });
+        FocusClientCommand = new RelayCommand(p => { if (p is ClientRow row && !InstanceControlService.Focus(row.Token)) _main.SetStatus(L.T("Clients.NoWindow")); });
+        CloseClientCommand = new RelayCommand(p => { if (p is ClientRow row) _ = Task.Run(() => { InstanceControlService.Close(row.Token); }); });
         OpenAccountCommand = new RelayCommand(p => { if (p is Account a) _main.ShowAccount(a); });
         FixAccountCommand = new AsyncRelayCommand(p => FixAsync(p as Account));
 
@@ -225,6 +226,7 @@ public class DashboardViewModel : ObservableObject
             Clients.Add(new ClientRow
             {
                 Pid = c.Pid,
+                Token = c.Token,
                 Account = acc,
                 Name = name,
                 Detail = detail,

@@ -21,6 +21,9 @@ public static class ProcessRegistry
     /// </summary>
     private static readonly TimeSpan AdoptionGrace = TimeSpan.FromSeconds(30);
 
+    /// <summary>Stable identity for one OS process instance. PID alone is not stable on Windows.</summary>
+    public readonly record struct ProcessToken(int Pid, DateTime StartTimeLocal);
+
     public class Tracked
     {
         public long UserId { get; init; }
@@ -71,6 +74,13 @@ public static class ProcessRegistry
     public static void MarkClosing(int pid)
     {
         if (_byPid.TryGetValue(pid, out var t)) t.ClosingIntentionally = true;
+    }
+
+    public static void MarkClosing(ProcessToken token)
+    {
+        if (_byPid.TryGetValue(token.Pid, out var t)
+            && SameStart(t.StartTimeLocal, token.StartTimeLocal))
+            t.ClosingIntentionally = true;
     }
 
     /// <summary>Pids tracked for an account right now.</summary>
@@ -234,29 +244,65 @@ public static class ProcessRegistry
         catch { return false; }
     }
 
+    private static bool SameStart(DateTime a, DateTime b)
+        => a == default || b == default || Math.Abs((a - b).TotalSeconds) < 2;
+
+    public static ProcessToken TokenFor(Tracked tracked) => new(tracked.Pid, tracked.StartTimeLocal);
+
+    public static bool TryGetToken(int pid, out ProcessToken token)
+    {
+        if (_byPid.TryGetValue(pid, out var tracked))
+        {
+            token = TokenFor(tracked);
+            return true;
+        }
+        token = default;
+        return false;
+    }
+
+    /// <summary>True only when the live process is the exact process currently tracked under its PID.</summary>
+    internal static bool IsTrackedProcess(Process live)
+    {
+        if (!_byPid.TryGetValue(live.Id, out var tracked)) return false;
+        return IsSameProcess(live, tracked);
+    }
+
+    internal static bool IsTrackedProcess(Process live, ProcessToken expected)
+    {
+        if (live.Id != expected.Pid) return false;
+        if (!_byPid.TryGetValue(live.Id, out var tracked)) return false;
+        return SameStart(tracked.StartTimeLocal, expected.StartTimeLocal)
+               && IsSameProcess(live, tracked)
+               && SameStart(live.StartTime, expected.StartTimeLocal);
+    }
+
     /// <summary>Live main-window handle for a tracked PID (0 until the client has a window).</summary>
-    public static IntPtr WindowHandle(int pid)
+    public static IntPtr WindowHandle(ProcessToken token)
     {
         try
         {
-            using var p = Process.GetProcessById(pid);
-            if (!_byPid.TryGetValue(pid, out var t) || IsSameProcess(p, t)) return p.MainWindowHandle;
-            return IntPtr.Zero;   // pid was recycled — never hand out a stranger's window
+            using var p = Process.GetProcessById(token.Pid);
+            return IsTrackedProcess(p, token) ? p.MainWindowHandle : IntPtr.Zero;
         }
         catch { return IntPtr.Zero; }
     }
 
+    public static IntPtr WindowHandle(int pid)
+        => TryGetToken(pid, out var token) ? WindowHandle(token) : IntPtr.Zero;
+
     /// <summary>Working-set bytes for a tracked PID, or -1 if it's gone.</summary>
-    public static long MemoryBytes(int pid)
+    public static long MemoryBytes(ProcessToken token)
     {
         try
         {
-            using var p = Process.GetProcessById(pid);
-            if (!_byPid.TryGetValue(pid, out var t) || IsSameProcess(p, t)) return p.WorkingSet64;
-            return -1;            // recycled pid: reporting its RAM could get it auto-killed
+            using var p = Process.GetProcessById(token.Pid);
+            return IsTrackedProcess(p, token) ? p.WorkingSet64 : -1;
         }
         catch { return -1; }
     }
+
+    public static long MemoryBytes(int pid)
+        => TryGetToken(pid, out var token) ? MemoryBytes(token) : -1;
 
     /// <summary>Drops a pid without raising <see cref="Exited"/> (the pid turned out not to be a client).</summary>
     public static void Forget(int pid)
