@@ -230,7 +230,7 @@ public class AccountStore
             if (string.IsNullOrEmpty(existing.Username)) existing.Username = identity.Name;
             Save();
             AuditLogService.Log(AuditLogService.Category.Cookie, $"Cookie refreshed for {identity.Name} (userId {identity.Id})");
-            return new(false, L.T("Add.Cookie.Refreshed", identity.Name), existing);
+            return new(true, L.T("Add.Cookie.Refreshed", identity.Name), existing);
         }
 
         var now = DateTime.UtcNow;

@@ -46,11 +46,7 @@ public static class ClipboardService
         _pendingSecret = text;
         _timer?.Stop();
         if (seconds > 0)
-        {
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
-            _timer.Tick += (_, _) => { _timer?.Stop(); ClearSecretIfPresent(); };
-            _timer.Start();
-        }
+            ScheduleClear(TimeSpan.FromSeconds(seconds));
         return true;
     }
 
@@ -61,12 +57,25 @@ public static class ClipboardService
         if (secret == null) return;
         try
         {
-            if (Clipboard.ContainsText() && Clipboard.GetText() == secret)
-                Clipboard.Clear();
+            if (!Clipboard.ContainsText() || Clipboard.GetText() != secret)
+            {
+                _pendingSecret = null;
+                return;
+            }
+
+            Clipboard.Clear();
+            _pendingSecret = null;
         }
-        catch (COMException) { /* busy; the secret stays — nothing else to try */ }
-        catch (ExternalException) { }
-        _pendingSecret = null;
+        catch (COMException) { ScheduleClear(TimeSpan.FromMilliseconds(500)); }
+        catch (ExternalException) { ScheduleClear(TimeSpan.FromMilliseconds(500)); }
+    }
+
+    private static void ScheduleClear(TimeSpan delay)
+    {
+        _timer?.Stop();
+        _timer = new DispatcherTimer { Interval = delay };
+        _timer.Tick += (_, _) => { _timer?.Stop(); ClearSecretIfPresent(); };
+        _timer.Start();
     }
 
     private static bool TrySet(Action set)

@@ -177,8 +177,7 @@ public static class Paths
     {
         string local = System.IO.Path.Combine(BaseDir, "data");
 
-        if (System.IO.File.Exists(System.IO.Path.Combine(BaseDir, "portable.txt"))
-            || System.IO.Directory.Exists(local))
+        if (System.IO.File.Exists(System.IO.Path.Combine(BaseDir, "portable.txt")))
         {
             IsPortable = true;
             return local;

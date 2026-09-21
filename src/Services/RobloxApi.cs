@@ -641,9 +641,6 @@ public static class RobloxApi
     // ---------------------------------------------------------------
     public record ParsedJoinLink(long PlaceId, string? LinkCode, string? ShareCode, string? JobId);
 
-    private static readonly Regex GuidPattern =
-        new(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", RegexOptions.Compiled);
-
     /// <summary>
     /// Pulls what it can out of a pasted Roblox link without a network call:
     /// <c>…/games/{placeId}/name?privateServerLinkCode={code}</c>, a plain game link,
@@ -665,7 +662,7 @@ public static class RobloxApi
             linkCode = q["privateServerLinkCode"] ?? q["linkCode"];
 
             string? instance = q["gameInstanceId"] ?? q["gameId"] ?? q["jobId"];
-            if (!string.IsNullOrEmpty(instance) && GuidPattern.IsMatch(instance)) jobId = instance;
+            if (LooksLikeJobId(instance)) jobId = instance!.Trim();
 
             string? code = q["code"];
             bool isShare = uri.AbsolutePath.Contains("share", StringComparison.OrdinalIgnoreCase)
@@ -679,7 +676,8 @@ public static class RobloxApi
             jobId);
     }
 
-    public static bool LooksLikeJobId(string? text) => text != null && GuidPattern.IsMatch(text);
+    public static bool LooksLikeJobId(string? text)
+        => text != null && Guid.TryParseExact(text.Trim(), "D", out _);
 
     public record ShareLinkInfo(long PlaceId, string LinkCode);
 
