@@ -48,7 +48,14 @@ public static class LauncherService
     {
         public bool Success { get; init; }
         public string Message { get; init; } = "";
-        public static LaunchResult Ok() => new() { Success = true, Message = L.T("Launch.Launched") };
+        public Task<int?>? AttributionTask { get; init; }
+
+        public static LaunchResult Ok(Task<int?>? attributionTask = null) => new()
+        {
+            Success = true,
+            Message = L.T("Launch.Launched"),
+            AttributionTask = attributionTask,
+        };
         public static LaunchResult Fail(string m) => new() { Success = false, Message = m };
     }
 
@@ -155,7 +162,7 @@ public static class LauncherService
                 try { await PresenceService.PollNowAsync(); } catch { }
             });
 
-            _ = Task.Run(() => AttributeClientAsync(acc, target.PlaceId, jobId, launchedAt));
+            Task<int?> attributionTask = Task.Run(() => AttributeClientAsync(acc, target.PlaceId, jobId, launchedAt));
 
             try { PluginService.RaiseLaunched(acc, target.PlaceId, jobId); } catch { }
             if (settings.ToastOnLaunch)
@@ -163,7 +170,7 @@ public static class LauncherService
             if (settings.NotifyOnConnect && WebhookService.Configured)
                 WebhookService.Connected(acc, target.PlaceId, jobId);
             AuditLogService.Log(AuditLogService.Category.Launch, $"Launched {acc.DisplayNameOrUser} into place {target.PlaceId}");
-            return LaunchResult.Ok();
+            return LaunchResult.Ok(attributionTask);
         }
         catch (Exception ex)
         {
@@ -176,7 +183,7 @@ public static class LauncherService
     /// a pending Roblox update, a slow disk) the client can take far longer than a few seconds to
     /// exist, and a single miss meant no Anti-AFK, crash watchdog or RAM cap for it.
     /// </summary>
-    private static async Task AttributeClientAsync(Account acc, long placeId, string? jobId, DateTime launchedAt)
+    private static async Task<int?> AttributeClientAsync(Account acc, long placeId, string? jobId, DateTime launchedAt)
     {
         await Task.Delay(4000);
 
@@ -189,6 +196,7 @@ public static class LauncherService
 
         if (pid != 0) _lastProcess[acc.UserId] = pid;
         else DiagnosticsService.Warn("launcher", $"No client could be attributed to {acc.DisplayNameOrUser} within 34s of launch");
+        return pid == 0 ? null : pid;
     }
 
     /// <summary>
@@ -236,10 +244,10 @@ public static class LauncherService
                 await Task.Delay(5000);
                 try { await PresenceService.PollNowAsync(); } catch { }
             });
-            _ = Task.Run(() => AttributeClientAsync(acc, 0, null, launchedAt));
+            Task<int?> attributionTask = Task.Run(() => AttributeClientAsync(acc, 0, null, launchedAt));
             if (SettingsService.Current.ToastOnLaunch)
                 ToastService.Success(L.T("Toast.Launched.Title"), L.T("Toast.Launched.Body", acc.DisplayNameOrUser));
-            return LaunchResult.Ok();
+            return LaunchResult.Ok(attributionTask);
         }
         catch (Exception ex) { return LaunchResult.Fail(ExplainLaunchFailure(ex)); }
     }

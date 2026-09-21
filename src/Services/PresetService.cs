@@ -11,6 +11,8 @@ public static class PresetService
 {
     private static Func<string, Account?>? _resolve;
 
+    public sealed record LaunchBatchResult(int Launched, int Failed, IReadOnlyList<Task<int?>> AttributionTasks);
+
     /// <summary>Wires the alias/username → account resolver. Call once at startup.</summary>
     public static void Init(Func<string, Account?> resolver) => _resolve = resolver;
 
@@ -20,9 +22,16 @@ public static class PresetService
     /// </summary>
     public static async Task<(int launched, int failed)> LaunchAsync(LaunchPreset preset)
     {
-        if (_resolve == null) return (0, 0);
+        var result = await LaunchTrackedAsync(preset);
+        return (result.Launched, result.Failed);
+    }
+
+    public static async Task<LaunchBatchResult> LaunchTrackedAsync(LaunchPreset preset)
+    {
+        if (_resolve == null) return new LaunchBatchResult(0, 0, Array.Empty<Task<int?>>());
 
         int launched = 0, failed = 0;
+        var attributionTasks = new List<Task<int?>>();
         string? jobId = string.IsNullOrWhiteSpace(preset.JobId) ? null : preset.JobId;
         int delay = Math.Max(0, preset.JoinDelaySeconds);
 
@@ -34,7 +43,12 @@ public static class PresetService
             try
             {
                 var result = await LauncherService.LaunchAsync(acc, preset.PlaceId, jobId);
-                if (result.Success) launched++; else failed++;
+                if (result.Success)
+                {
+                    launched++;
+                    if (result.AttributionTask != null) attributionTasks.Add(result.AttributionTask);
+                }
+                else failed++;
             }
             catch { failed++; }
 
@@ -43,7 +57,7 @@ public static class PresetService
                 await Task.Delay(TimeSpan.FromSeconds(delay));
         }
 
-        return (launched, failed);
+        return new LaunchBatchResult(launched, failed, attributionTasks);
     }
 
     /// <summary>Finds a preset by name (case-insensitive) in the current settings.</summary>
