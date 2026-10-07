@@ -95,7 +95,10 @@ public class PresetItem : ObservableObject
         get => Model.SavedPlaceId;
         set
         {
-            Model.SavedPlaceId = value ?? "";
+            // The picker writes null when its list is rebuilt without the current entry (the saved
+            // place was renamed or deleted). That is not a choice; "None" is "".
+            if (value is null) return;
+            Model.SavedPlaceId = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(UsesSaved));
             OnPropertyChanged(nameof(Summary));
@@ -115,6 +118,17 @@ public class PresetItem : ObservableObject
         {
             if (!Enum.TryParse<JoinKind>(value, out var kind) || kind == Model.Destination) return;
             Model.Destination = kind;
+
+            // Drop what the new destination doesn't use, so the saved preset is the one on screen
+            // rather than one with a hidden Job ID, link or player left over from before.
+            if (kind != JoinKind.Server) Model.JobId = "";
+            if (kind != JoinKind.PrivateServer) Model.PrivateServerLink = "";
+            if (kind != JoinKind.FollowUser)
+            {
+                Model.FollowUsername = "";
+                Model.FollowUserId = 0;
+                _followHint = null;
+            }
             RaiseDestination();
             _owner.Persist();
         }
@@ -241,7 +255,15 @@ public class PresetItem : ObservableObject
     public string Profile
     {
         get => Model.PerformanceProfile;
-        set { Model.PerformanceProfile = PerformanceProfiles.IsKnown(value) ? value ?? "" : ""; OnPropertyChanged(); _owner.Persist(); }
+        set
+        {
+            // The picker writes null when a language switch rebuilds its list. That is not a choice
+            // (Normal is ""), and taking it would quietly turn a preset's Ultra-low profile off.
+            if (value is null) return;
+            Model.PerformanceProfile = PerformanceProfiles.IsKnown(value) ? value : "";
+            OnPropertyChanged();
+            _owner.Persist();
+        }
     }
 
     public ObservableCollection<PresetMember> Members { get; } = new();

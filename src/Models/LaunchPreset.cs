@@ -18,7 +18,17 @@ public class LaunchPreset
     /// <see cref="PlaceId"/> + <see cref="JobId"/> and are classified by <see cref="NormalizeDestination"/>.
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public JoinKind Destination { get; set; } = JoinKind.Place;
+    public JoinKind Destination
+    {
+        get => _destination;
+        set { _destination = value; _hasDestination = true; }
+    }
+    private JoinKind _destination = JoinKind.Place;
+
+    // The JSON reader only calls the setter when the file has the field, so this stays false just for
+    // presets saved before destinations existed. Field values can't tell those apart: a "Place" preset
+    // can carry a Job ID from when it pointed at a server.
+    private bool _hasDestination;
 
     /// <summary>Specific public server, for <see cref="JoinKind.Server"/>.</summary>
     public string JobId { get; set; } = "";
@@ -51,11 +61,13 @@ public class LaunchPreset
     /// <summary>
     /// Upgrades a preset saved before destinations existed. Those stored whatever was typed into the
     /// "Server ID" box in <see cref="JobId"/> — including private-server links, which were then launched
-    /// as a garbage Job ID. Idempotent; returns true when something changed.
+    /// as a garbage Job ID. Presets that have a destination are never touched. Idempotent; returns true
+    /// when something changed.
     /// </summary>
     public bool NormalizeDestination()
     {
-        if (Destination != JoinKind.Place || string.IsNullOrWhiteSpace(JobId)) return false;
+        if (_hasDestination || string.IsNullOrWhiteSpace(JobId)) return false;
+        _hasDestination = true;
 
         string legacy = JobId.Trim();
         JobId = "";
