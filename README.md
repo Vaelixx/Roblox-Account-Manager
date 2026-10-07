@@ -35,8 +35,9 @@ Sign in once, launch any account into any game with a click, run several side by
 - **Browser sign-in fixed:** no more "the sign-in window was closed" while the window is still open.
 - **Presets go anywhere:** a game, a specific server, a private server or wherever a player is, with
   an optional Ultra-low AFK performance profile.
-- **Steadier automation:** launches never race each other, auto-rejoin returns to the same server and
-  backs off instead of giving up, and schedules close only the clients they started.
+- **Steadier automation:** launches never race each other, auto-rejoin returns to the same game,
+  private server or player and backs off instead of giving up, and schedules close only the clients
+  they started.
 
 Thanks to everyone who sent pull requests. The full list is in the [changelog](CHANGELOG.md).
 

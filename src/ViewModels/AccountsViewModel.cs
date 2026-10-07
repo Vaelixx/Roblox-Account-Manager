@@ -154,7 +154,7 @@ public class AccountsViewModel : ObservableObject
 
     public void RefreshLocalized()
     {
-        if (_hiddenServer != null) SetServerInput(_hiddenServer);   // its placeholder in the new language
+        if (HidesServer) SetServerInput(_hiddenServer!);   // its placeholder in the new language
         OnPropertyChanged(string.Empty);
         RefreshView();
     }
@@ -383,7 +383,7 @@ public class AccountsViewModel : ObservableObject
     public void RefreshMask()
     {
         OnPropertyChanged(nameof(MaskUsernames));
-        SetServerInput(_hiddenServer ?? JobIdText);   // hides a private link already in the server box, or shows it again
+        SetServerInput(ServerInput);   // hides a private link already in the server box, or shows it again
     }
 
     private string _inspectorTab = "Overview";
@@ -855,26 +855,28 @@ public class AccountsViewModel : ObservableObject
     }
 
     private string _jobIdText = "";
-    public string JobIdText
-    {
-        get => _jobIdText;
-        set { if (SetField(ref _jobIdText, value ?? "")) _hiddenServer = null; }   // typed over the placeholder
-    }
+    public string JobIdText { get => _jobIdText; set => SetField(ref _jobIdText, value ?? ""); }
 
     // A private-server or share link the launch bar uses without showing it. While usernames are hidden
-    // for screen sharing, a link restored at startup or picked from a saved place would let anyone
-    // watching join that server, so the server box shows a placeholder instead.
+    // for screen sharing, a link restored at startup, picked from a saved place or just launched with
+    // would let anyone watching join that server, so the server box shows a placeholder instead.
     private string? _hiddenServer;
+    private string _hiddenPlaceholder = "";
+
+    // The placeholder still stands in the box (typing something else replaces the hidden link, and an
+    // edit that is undone again brings the placeholder, and with it the link, back).
+    private bool HidesServer => _hiddenServer != null && JobIdText == _hiddenPlaceholder;
 
     /// <summary>What the server box stands for: the hidden link, or what is typed in it.</summary>
-    private string ServerInput => _hiddenServer ?? JobIdText.Trim();
+    private string ServerInput => HidesServer ? _hiddenServer! : JobIdText.Trim();
 
     /// <summary>Fills the server box, keeping a private link out of sight while usernames are hidden.</summary>
     private void SetServerInput(string value)
     {
         bool hide = SettingsService.Current.HideUsernames && LaunchBarInput.IsPrivateLink(value);
-        JobIdText = hide ? L.T("Launch.ServerHidden") : value;
+        _hiddenPlaceholder = hide ? L.T("Launch.ServerHidden") : "";
         _hiddenServer = hide ? value.Trim() : null;
+        JobIdText = hide ? _hiddenPlaceholder : value;
     }
 
     private string _followText = "";
@@ -1003,6 +1005,8 @@ public class AccountsViewModel : ObservableObject
         {
             // A specific public server is gone by the next start, so the box then starts empty instead.
             RememberInput(LaunchBarInput.IsWorthRemembering(input) ? input : "", null);
+            // A private link pasted while usernames are hidden goes out of sight once it has been used.
+            if (!HidesServer && SettingsService.Current.HideUsernames && LaunchBarInput.IsPrivateLink(input)) SetServerInput(input);
             return result.Target;
         }
 

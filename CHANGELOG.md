@@ -92,8 +92,8 @@ behind.
   ran for 10 minutes resets the count.
 - **Saved places remember their server.** The launch bar's bookmark saves the Job ID or
   private-server / share link with the place (encrypted), and presets can use a saved place, so a
-  link is pasted once and several presets can share it. With **Hide usernames** on, a private-server
-  link is never shown in the launch bar.
+  link is pasted once and several presets can share it. With **Hide usernames** on, the launch bar
+  shows a saved, remembered or just used private-server link as a placeholder.
 - **Rejoin after a disconnect** (optional): a client whose account stops showing as in game — a
   network drop that leaves it on an error screen — is closed and rejoined. It only acts on presence
   Roblox just reported, and stops after three restarts in a row that never got into a game.

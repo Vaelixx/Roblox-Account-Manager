@@ -646,19 +646,21 @@ public static class BrowserService
     /// Sends one DevTools command and waits for the reply with the matching id, skipping protocol
     /// events in between. Null when nothing answered in time — the caller polls again.
     /// </summary>
+    /// <param name="timeout">How long to wait for the reply (10 s); a navigation can need longer behind a slow proxy.</param>
     private static async Task<JsonDocument?> CallAsync(ClientWebSocket socket, int id, string method,
-        object @params, CancellationToken ct)
+        object @params, CancellationToken ct, TimeSpan? timeout = null)
     {
+        var wait = timeout ?? TimeSpan.FromSeconds(10);
         string payload = JsonSerializer.Serialize(new { id, method, @params });
         await socket.SendAsync(Encoding.UTF8.GetBytes(payload), WebSocketMessageType.Text, true, ct);
 
         var buffer = new byte[64 * 1024];
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var deadline = DateTime.UtcNow + wait;
 
         // The deadline also bounds each receive, so an endpoint that answers nothing can't hold the call.
         // A receive that times out leaves the socket aborted; the callers reconnect or give up.
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        using var receiveTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        receiveTimeout.CancelAfter(wait);
 
         while (DateTime.UtcNow < deadline && socket.State == WebSocketState.Open)
         {
@@ -666,7 +668,7 @@ public static class BrowserService
             WebSocketReceiveResult result;
             do
             {
-                try { result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token); }
+                try { result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), receiveTimeout.Token); }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
                 if (result.MessageType == WebSocketMessageType.Close) return null;
                 ms.Write(buffer, 0, result.Count);
@@ -705,13 +707,14 @@ public static class BrowserService
             secure = true,
             httpOnly = true,
         }, ct))?.Dispose();
-        (await CallAsync(socket, 3, "Page.navigate", new { url = "https://www.roblox.com/home" }, ct))?.Dispose();
+        // Page.navigate answers once the page starts arriving, which behind a slow proxy takes a while.
+        (await CallAsync(socket, 3, "Page.navigate", new { url = "https://www.roblox.com/home" }, ct, TimeSpan.FromSeconds(45)))?.Dispose();
 
         if (!string.IsNullOrWhiteSpace(injectJs))
         {
             (await CallAsync(socket, 4, "Runtime.enable", new { }, ct))?.Dispose();
             await Task.Delay(2500);
-            (await CallAsync(socket, 5, "Runtime.evaluate", new { expression = injectJs, userGesture = true, awaitPromise = false }, ct))?.Dispose();
+            (await CallAsync(socket, 5, "Runtime.evaluate", new { expression = injectJs, userGesture = true, awaitPromise = false }, ct, TimeSpan.FromSeconds(45)))?.Dispose();
         }
 
         try { await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None); } catch { }
