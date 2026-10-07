@@ -147,5 +147,6 @@ public class JoinLinksTests
     [InlineData("9223372036854775807", long.MaxValue)]
     [InlineData("9223372036854775808", 0)]   // one past the largest id: no exception, no wrapped-around id
     [InlineData("0f8b2c1e-1234-4abc-9def-0123456789ab", 0)]   // a Job ID in the place box: its 20 digits are not a place
+    [InlineData("https://www.roblox.com/games/start?placeId=-5", 0)]   // a link can't produce a negative place either
     public void ParsePlaceId(string input, long expected) => Assert.Equal(expected, JoinLinks.ParsePlaceId(input));
 }

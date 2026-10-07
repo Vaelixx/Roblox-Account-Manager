@@ -96,4 +96,11 @@ public class LaunchPresetTests
         Assert.Contains("\"PrivateServerLink\":\"enc1:", json);
         Assert.Equal(link, JsonSerializer.Deserialize<LaunchPreset>(json)!.PrivateServerLink);
     }
+
+    [Fact]
+    public void A_null_secret_in_a_hand_edited_file_reads_as_empty()
+    {
+        var p = JsonSerializer.Deserialize<LaunchPreset>("""{"Name":"Farm","Destination":"PrivateServer","PrivateServerLink":null}""")!;
+        Assert.Equal("", p.PrivateServerLink);
+    }
 }

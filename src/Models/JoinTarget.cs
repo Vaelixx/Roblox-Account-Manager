@@ -123,7 +123,7 @@ public static class JoinLinks
         string t = (text ?? "").Trim();
         if (t.Length == 0) return 0;
         if (long.TryParse(t, out long direct)) return direct > 0 ? direct : 0;
-        if (LooksLikeLink(t)) return Parse(t).PlaceId;
+        if (LooksLikeLink(t)) return Math.Max(0, Parse(t).PlaceId);
         var digits = new string(t.Where(char.IsDigit).ToArray());
         return digits.Length is > 0 and <= 18 && long.TryParse(digits, out long id) && id > 0 ? id : 0;
     }

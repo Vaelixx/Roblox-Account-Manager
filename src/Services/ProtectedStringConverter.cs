@@ -14,6 +14,9 @@ namespace RobloxAccountManager.Services;
 /// </summary>
 public sealed class ProtectedStringConverter : JsonConverter<string>
 {
+    // Without this the serializer hands a JSON null past Read and the property ends up null, not "".
+    public override bool HandleNull => true;
+
     public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Null) return "";
@@ -21,7 +24,7 @@ public sealed class ProtectedStringConverter : JsonConverter<string>
         return Crypto.UnprotectString(raw);
     }
 
-    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, string? value, JsonSerializerOptions options)
     {
         try { writer.WriteStringValue(string.IsNullOrEmpty(value) ? "" : Crypto.ProtectString(value)); }
         catch { writer.WriteStringValue(""); }   // never fall back to writing the secret in the clear

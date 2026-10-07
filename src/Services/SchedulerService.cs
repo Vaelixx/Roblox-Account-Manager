@@ -124,14 +124,23 @@ public static class SchedulerService
             if (!string.IsNullOrWhiteSpace(task.PresetName))
             {
                 var preset = PresetService.Find(task.PresetName);
-                if (preset != null)
+                if (preset == null)
+                    DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': preset '{task.PresetName}' no longer exists");
+                else if (!PresetService.TryBeginRun(preset.Name))
+                    // Started by hand or through the local API and still launching: not a second time.
+                    DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': preset '{preset.Name}' is already launching");
+                else
                 {
-                    var r = await PresetService.LaunchAsync(preset, origin: origin);
-                    launched = r.Launched;
-                    if (r.Error != null || r.Failed > 0)
-                        DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': {r.Launched} launched, {r.Failed} failed{(r.Error != null ? " — " + r.Error : "")}");
+                    string runName = preset.Name;   // EndRun needs the name it began with, even after a rename
+                    try
+                    {
+                        var r = await PresetService.LaunchAsync(preset, origin: origin);
+                        launched = r.Launched;
+                        if (r.Error != null || r.Failed > 0)
+                            DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': {r.Launched} launched, {r.Failed} failed{(r.Error != null ? " — " + r.Error : "")}");
+                    }
+                    finally { PresetService.EndRun(runName); }
                 }
-                else DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': preset '{task.PresetName}' no longer exists");
             }
             else if (!string.IsNullOrWhiteSpace(task.Alias))
             {
