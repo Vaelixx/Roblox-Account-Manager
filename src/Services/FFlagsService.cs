@@ -68,8 +68,9 @@ public static class FFlagsService
         // What this launch's profile leaves in the file (an account override can win over a profile flag).
         var written = profileFlags.Keys.ToDictionary(k => k, k => flags[k], StringComparer.Ordinal);
         var previous = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        var failed = new List<string>();
 
-        int count = Write(flags, (dir, file) =>
+        int count = Write(flags, failed, (dir, file) =>
         {
             var oldPrevious = undo != null && undo.Previous.TryGetValue(dir, out var p) ? p : new Dictionary<string, string>();
 
@@ -93,6 +94,9 @@ public static class FFlagsService
                 }
         });
 
+        // A plain launch that could not reach every flag file keeps the record: the profile's flags may still
+        // be in the file it missed, and undoing only touches flags that still hold the profile's values.
+        if (written.Count == 0 && undo != null && failed.Count > 0) return count;
         s.ProfileUndo = written.Count > 0 ? new ProfileUndoState { Written = written, Previous = previous } : null;
         return count;
     }
@@ -105,19 +109,37 @@ public static class FFlagsService
             int profileFps = PerformanceProfiles.FpsCap(profile, s.UltraLowAfk);
             if (profileFps > 0)
             {
-                s.FpsCapBeforeProfile ??= RobloxClientSettingsService.ReadFramerateCap() ?? 0;
-                RobloxClientSettingsService.WriteFramerateCap(profileFps);
-                s.FpsCapWrittenByProfile = profileFps;
+                if (s.FpsCapBeforeProfile == null)
+                {
+                    // What to put back later; no cap in the file is Roblox's default (-1). If the file can't
+                    // be read right now, the profile's cap isn't written either, or the user's would be lost.
+                    if (!RobloxClientSettingsService.TryReadFramerateCap(out int? current)) return;
+                    s.FpsCapBeforeProfile = current ?? -1;
+                }
+                if (RobloxClientSettingsService.WriteFramerateCap(profileFps)) s.FpsCapWrittenByProfile = profileFps;
                 return;
             }
 
+            bool restored;
             if (s.FpsCap > 0)
-                RobloxClientSettingsService.WriteFramerateCap(s.FpsCap);
-            else if (s.FpsCapBeforeProfile is int before && before != 0
-                     && RobloxClientSettingsService.ReadFramerateCap() == s.FpsCapWrittenByProfile)
-                RobloxClientSettingsService.WriteFramerateCap(before);   // unless the user changed it in game since
-            s.FpsCapBeforeProfile = null;
-            s.FpsCapWrittenByProfile = null;
+                restored = RobloxClientSettingsService.WriteFramerateCap(s.FpsCap);
+            else if (s.FpsCapBeforeProfile is int before)
+            {
+                if (!RobloxClientSettingsService.TryReadFramerateCap(out int? current)) return;   // the next launch tries again
+                // The profile's cap is still there: put the user's back. Anything else they changed in game since.
+                restored = s.FpsCapWrittenByProfile is not int ours || current != ours
+                           || RobloxClientSettingsService.WriteFramerateCap(before);
+            }
+            else return;
+
+            // A running Ultra-low client writes its cap back into the file when it closes, so the record
+            // stays until none is left and the next plain launch restores the cap once more.
+            bool profileStillRunning = ProcessRegistry.All.Any(t => t.Profile == PerformanceProfiles.UltraLowAfk);
+            if (restored && !profileStillRunning)
+            {
+                s.FpsCapBeforeProfile = null;
+                s.FpsCapWrittenByProfile = null;
+            }
         }
         catch (Exception ex) { DiagnosticsService.Warn("fflags", "Could not apply the frame-rate cap", ex); }
     }
@@ -172,8 +194,10 @@ public static class FFlagsService
     /// bootstrapper (Bloxstrap, Fishstrap…) that is its own managed file. Existing flags are merged,
     /// not replaced: a bootstrapper's file is the user's configuration.
     /// </summary>
+    /// <param name="failed">Collects the folders that could not be written, when given.</param>
     /// <param name="adjust">Runs on each file's current flags before <paramref name="flags"/> are merged in.</param>
-    private static int Write(Dictionary<string, string> flags, Action<string, Dictionary<string, string>>? adjust = null)
+    private static int Write(Dictionary<string, string> flags, List<string>? failed = null,
+        Action<string, Dictionary<string, string>>? adjust = null)
     {
         int written = 0;
         foreach (var csDir in RobloxInstallService.FlagTargetDirectories())
@@ -198,6 +222,7 @@ public static class FFlagsService
             catch (Exception ex)
             {
                 DiagnosticsService.Warn("fflags", $"Could not write flags into {csDir}", ex);
+                failed?.Add(csDir);
             }
         }
         return written;

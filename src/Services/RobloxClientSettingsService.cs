@@ -42,17 +42,26 @@ public static class RobloxClientSettingsService
     }
 
     /// <summary>Current frame-rate cap from the file, or null when unknown.</summary>
-    public static int? ReadFramerateCap()
+    public static int? ReadFramerateCap() => TryReadFramerateCap(out int? cap) ? cap : null;
+
+    /// <summary>
+    /// Reads the frame-rate cap. False when there is no settings file or it can't be read right now
+    /// (Roblox writes it while a client closes); true with a null cap when the file has no cap, which
+    /// means Roblox's default.
+    /// </summary>
+    public static bool TryReadFramerateCap(out int? cap)
     {
+        cap = null;
         try
         {
             string? file = SettingsFile();
-            if (file == null) return null;
+            if (file == null) return false;
             var doc = XDocument.Load(file);
             var el = doc.XPathSelectElement("//Item[@class='UserGameSettings']/Properties/int[@name='FramerateCap']");
-            return el != null && int.TryParse(el.Value, out int v) ? v : null;
+            if (el != null && int.TryParse(el.Value, out int v)) cap = v;
+            return true;
         }
-        catch { return null; }
+        catch { return false; }
     }
 
     /// <summary>
