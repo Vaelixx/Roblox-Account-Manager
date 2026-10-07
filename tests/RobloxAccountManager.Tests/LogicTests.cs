@@ -98,6 +98,28 @@ public class BrowserLivenessTests
         Assert.False(l.Observe(false, 0));
         Assert.True(l.Observe(false, 0));    // the endpoint itself going away still counts
     }
+
+    [Fact]
+    public void Never_reachable_counts_as_closed()
+    {
+        // The window was closed before the first probe: no page was ever seen, but the misses count all the same.
+        var l = new BrowserLiveness();
+        for (int miss = 1; miss < BrowserLiveness.ClosedAfter; miss++) Assert.False(l.Observe(false, 0));
+        Assert.True(l.Observe(false, 0));
+        Assert.True(l.Observe(false, 0));    // and it stays closed
+        Assert.False(l.Observe(true, 1));    // a window that turns up after all is open...
+        Assert.False(l.Observe(false, 0));   // ...and the count starts over
+    }
+
+    [Fact]
+    public void No_pages_is_a_miss_only_once_a_page_was_seen()
+    {
+        var l = new BrowserLiveness();
+        for (int i = 0; i < 2 * BrowserLiveness.ClosedAfter; i++) Assert.False(l.Observe(true, 0));   // still starting up
+        Assert.False(l.Observe(true, 1));
+        for (int miss = 1; miss < BrowserLiveness.ClosedAfter; miss++) Assert.False(l.Observe(true, 0));
+        Assert.True(l.Observe(true, 0));     // the browser lives on in the background without its window
+    }
 }
 
 public class PerformanceProfileTests

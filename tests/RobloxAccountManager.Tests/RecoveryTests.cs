@@ -32,6 +32,27 @@ public class RejoinBackoffTests
         Assert.Equal(0, RejoinBackoff.StreakAfterExit(7, TimeSpan.FromMinutes(30)));
         Assert.Equal(7, RejoinBackoff.StreakAfterExit(7, TimeSpan.FromMinutes(2)));
     }
+
+    [Theory]
+    [InlineData(0, 3)]          // the first three rejoins in a row only give the old client time to die
+    [InlineData(1, 3)]
+    [InlineData(2, 3)]
+    [InlineData(3, 2 * 60)]     // then 2, 5, 10 and 15 minutes, as the changelog promises
+    [InlineData(4, 5 * 60)]
+    [InlineData(5, 10 * 60)]
+    [InlineData(6, 15 * 60)]
+    [InlineData(7, 15 * 60)]    // and 15 minutes for every rejoin after that
+    [InlineData(int.MaxValue, 15 * 60)]
+    [InlineData(-1, 3)]         // the watchdog never passes a negative streak; it must not throw if it did
+    public void Delay_for_each_rejoin_in_a_row(int streak, int seconds)
+        => Assert.Equal(TimeSpan.FromSeconds(seconds), RejoinBackoff.DelayFor(streak));
+
+    [Fact]
+    public void Exactly_ten_minutes_of_uptime_resets_the_streak()
+    {
+        Assert.Equal(0, RejoinBackoff.StreakAfterExit(7, TimeSpan.FromMinutes(10)));
+        Assert.Equal(7, RejoinBackoff.StreakAfterExit(7, TimeSpan.FromMinutes(10) - TimeSpan.FromTicks(1)));
+    }
 }
 
 public class DataFolderMigrationTests : IDisposable
