@@ -112,45 +112,49 @@ public static class ProcessRegistry
             // seconds later; picking "newest" hands the first launch the second launch's window
             // and vice versa — a deterministic swap that puts the wrong cookie on a rejoin and
             // makes "close previous client" kill the other account.
-            var candidate = procs
+            var candidates = procs
                 .Select(p =>
                 {
                     try { return (proc: p, start: p.StartTime, exited: p.HasExited); }
                     catch { return (proc: p, start: DateTime.MaxValue, exited: true); }
                 })
-                .Where(x => !x.exited
-                            && Claimable(x.proc.Id)
-                            && (launchedAt == null || x.start >= launchedAt.Value))
-                .OrderBy(x => x.start)
-                .Select(x => (x.proc, x.start))
-                .FirstOrDefault();
+                .Where(x => !x.exited && (launchedAt == null || x.start >= launchedAt.Value))
+                .OrderBy(x => x.start);
 
-            if (candidate.proc == null) return 0;
-
-            _byPid[candidate.proc.Id] = new Tracked
+            foreach (var candidate in candidates)
             {
-                UserId = acc.UserId,
-                Alias = acc.DisplayNameOrUser,
-                Cookie = acc.Cookie,
-                Pid = candidate.proc.Id,
-                PlaceId = placeId,
-                JobId = jobId,
-                ProcessName = ClientProcess,
-                StartTimeLocal = candidate.start,
-            };
-            RaiseChanged();
-            return candidate.proc.Id;
+                var tracked = new Tracked
+                {
+                    UserId = acc.UserId,
+                    Alias = acc.DisplayNameOrUser,
+                    Cookie = acc.Cookie,
+                    Pid = candidate.proc.Id,
+                    PlaceId = placeId,
+                    JobId = jobId,
+                    ProcessName = ClientProcess,
+                    StartTimeLocal = candidate.start,
+                };
+
+                if (_byPid.TryAdd(candidate.proc.Id, tracked))
+                {
+                    RaiseChanged();
+                    return candidate.proc.Id;
+                }
+
+                if (_byPid.TryGetValue(candidate.proc.Id, out var existing)
+                    && existing.IsExternal
+                    && _byPid.TryUpdate(candidate.proc.Id, tracked, existing))
+                {
+                    RaiseChanged();
+                    return candidate.proc.Id;
+                }
+            }
+
+            return 0;
         }
         catch { return 0; }
         finally { foreach (var p in procs) { try { p.Dispose(); } catch { } } }
     }
-
-    /// <summary>
-    /// A pid may be claimed by a launch when nothing tracks it yet, or when the only thing
-    /// tracking it is an "external" placeholder — a real account always outranks a placeholder.
-    /// </summary>
-    private static bool Claimable(int pid)
-        => !_byPid.TryGetValue(pid, out var existing) || existing.IsExternal;
 
     /// <summary>
     /// Clients started outside the manager (website Play button, Roblox home screen, a desktop
@@ -218,10 +222,10 @@ public static class ProcessRegistry
             }
             catch { gone = true; } // process no longer exists
 
-            if (gone && _byPid.TryRemove(kv.Key, out var t))
+            if (gone && ((ICollection<KeyValuePair<int, Tracked>>)_byPid).Remove(kv))
             {
                 removed = true;
-                try { Exited?.Invoke(t); } catch { }
+                try { Exited?.Invoke(kv.Value); } catch { }
             }
         }
         if (removed) RaiseChanged();
