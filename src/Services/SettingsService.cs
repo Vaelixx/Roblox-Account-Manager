@@ -22,7 +22,9 @@ public static class SettingsService
         {
             if (!File.Exists(FilePath))
             {
+                // A fresh install: nothing to migrate, but the defaults get the same checks as a file.
                 Current = new AppSettings { SettingsVersion = CurrentSchema };
+                Normalize(Current);
                 return;
             }
 
@@ -158,11 +160,22 @@ public static class SettingsService
 
     public static void Save()
     {
+        // The settings are edited on the UI thread. A save from elsewhere (a launch on a timer thread)
+        // would read the lists while the UI changes them, so it runs there too while the UI is up.
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess() && !dispatcher.HasShutdownStarted)
+        {
+            dispatcher.BeginInvoke(new Action(Save));
+            return;
+        }
+
         try
         {
-            string json = JsonSerializer.Serialize(Current, JsonOpts);
             lock (_saveLock)
             {
+                // Taken inside the lock, so the snapshots reach the file in the order they were taken
+                // and an older one can never overwrite a newer one.
+                string json = JsonSerializer.Serialize(Current, JsonOpts);
                 Directory.CreateDirectory(Paths.DataDir);
                 // Atomic write: stage to a temp file then swap, so a crash mid-write can never
                 // truncate settings.json.
@@ -190,7 +203,8 @@ public static class SettingsService
 /// <summary>
 /// Central place for on-disk locations. Data lives next to the executable (portable) when that
 /// folder is writable or a "portable.txt" marker is present; otherwise it falls back to
-/// %APPDATA%\RobloxAccountManager so installs under Program Files still work.
+/// %APPDATA%\RobloxAccountManager so installs under Program Files still work, and stays there
+/// (see <see cref="DataFolderMigration"/>).
 /// </summary>
 public static class Paths
 {
@@ -219,25 +233,13 @@ public static class Paths
             return local;
         }
 
-        try
-        {
-            System.IO.Directory.CreateDirectory(local);
-            string probe = System.IO.Path.Combine(local, ".wtest");
-            System.IO.File.WriteAllText(probe, "");
-            System.IO.File.Delete(probe);
-            IsPortable = true;
-            return local;
-        }
-        catch
-        {
-            IsPortable = false;
-            string perUser = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "RobloxAccountManager", "data");
-            // A data folder next to the exe that can't be written to: bring its contents along
-            // instead of starting empty (see DataFolderMigration — nothing is deleted).
-            DataFolderMigration.CopyIfNeeded(local, perUser);
-            return perUser;
-        }
+        string perUser = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "RobloxAccountManager", "data");
+        // A data folder next to the exe that can't be written to: its contents come along instead of
+        // starting empty, and the move is remembered (see DataFolderMigration — nothing is deleted).
+        string chosen = DataFolderMigration.Choose(local, perUser);
+        IsPortable = string.Equals(chosen, local, StringComparison.OrdinalIgnoreCase);
+        return chosen;
     }
 }

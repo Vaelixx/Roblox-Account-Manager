@@ -83,7 +83,7 @@ public class DataFolderMigrationTests : IDisposable
 
         Assert.Equal("encrypted accounts", File.ReadAllText(Path.Combine(New, "accounts.dat")));
         Assert.True(File.Exists(Path.Combine(New, "settings.json")));
-        Assert.True(File.Exists(Path.Combine(New, "cloakbrowser", "chrome.exe")));
+        Assert.False(Directory.Exists(Path.Combine(New, "cloakbrowser")));   // downloaded again in a click
         Assert.False(Directory.Exists(Path.Combine(New, "browser")));
         Assert.False(Directory.Exists(New + ".migrating"));
 

@@ -92,7 +92,7 @@ public class AppSettings
     /// <see cref="AntiAfkIntervalMaxMinutes"/>, so several clients don't all get their key press at once.
     /// </summary>
     public bool AntiAfkRandomize { get; set; } = false;
-    public int AntiAfkIntervalMaxMinutes { get; set; } = 14;
+    public int AntiAfkIntervalMaxMinutes { get; set; } = 19;   // above the minimum, below Roblox's 20-minute idle kick
 
     // ---- Crash watchdog ----
     public bool WatchdogEnabled { get; set; } = false;
