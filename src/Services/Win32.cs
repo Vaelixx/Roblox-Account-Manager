@@ -105,13 +105,24 @@ internal static class Win32
         catch { try { SetForegroundWindow(hWnd); } catch { } }
     }
 
-    /// <summary>Sends a full key press (down + up) by virtual-key code to the focused window.</summary>
-    internal static void TapKey(ushort vk, int holdMs = 90)
+    [DllImport("user32.dll")] private static extern uint MapVirtualKey(uint code, uint mapType);
+    private const uint MAPVK_VK_TO_VSC = 0;
+
+    /// <summary>
+    /// Sends a full key press (down + up) to the focused window, as the key's hardware scan code.
+    /// Roblox reads the keyboard by scan code: a press sent as a virtual-key code alone (scan code 0)
+    /// reached the window but was no key the game knew, so the character never jumped.
+    /// Returns false when Windows did not accept the input.
+    /// </summary>
+    internal static bool TapKey(ushort vk, int holdMs = 90)
     {
-        var down = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk } } };
-        var up = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, dwFlags = KEYEVENTF_KEYUP } } };
-        SendInput(1, new[] { down }, Marshal.SizeOf<INPUT>());
+        ushort scan = (ushort)MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+        uint flags = scan != 0 ? KEYEVENTF_SCANCODE : 0;
+        var down = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags } } };
+        var up = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags | KEYEVENTF_KEYUP } } };
+        bool ok = SendInput(1, new[] { down }, Marshal.SizeOf<INPUT>()) == 1;
         Thread.Sleep(holdMs);
-        SendInput(1, new[] { up }, Marshal.SizeOf<INPUT>());
+        ok &= SendInput(1, new[] { up }, Marshal.SizeOf<INPUT>()) == 1;
+        return ok;
     }
 }

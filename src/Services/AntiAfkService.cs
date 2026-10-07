@@ -156,14 +156,19 @@ public static class AntiAfkService
                     continue;
                 }
 
-                int presses = Math.Clamp(s.AntiAfkPresses, 1, 10);
+                int presses = Math.Clamp(s.AntiAfkPresses, 1, 10), pressed = 0, refused = 0;
                 for (int k = 0; k < presses; k++)
                 {
                     if (k > 0) Thread.Sleep(AfkSchedule.PressGapMs(Random.Shared));
                     if (Win32.GetForegroundWindow() != hWnd) break;   // the user clicked elsewhere meanwhile
-                    Win32.TapKey(vk, timing.HoldMs);
+                    if (Win32.TapKey(vk, timing.HoldMs)) pressed++; else refused++;
                 }
                 Thread.Sleep(timing.AfterMs);
+                // One line per visit, so the log shows whether the presses really went in.
+                if (refused > 0)
+                    DiagnosticsService.Warn("anti-afk", $"{t.Alias}: Windows refused {refused} of {pressed + refused} key presses (is Roblox running as administrator?)");
+                else
+                    DiagnosticsService.Log("anti-afk", $"Pressed {s.AntiAfkKey} {pressed}x in {t.Alias}'s window");
                 if (wasMinimized) Win32.ShowWindow(hWnd, SW_SHOWMINNOACTIVE);
 
                 st.LastSentUtc = DateTime.UtcNow;
