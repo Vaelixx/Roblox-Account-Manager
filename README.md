@@ -28,6 +28,18 @@ Sign in once, launch any account into any game with a click, run several side by
 
 </div>
 
+## What's new in 2.2
+
+- **Master-password unlock fixed:** 2.0 closed itself after the password prompt. 2.2 also brings back
+  accounts that updating from that prompt emptied: it asks for the master password once.
+- **Browser sign-in fixed:** no more "the sign-in window was closed" while the window is still open.
+- **Presets go anywhere:** a game, a specific server, a private server or wherever a player is, with
+  an optional Ultra-low AFK performance profile.
+- **Steadier automation:** launches never race each other, auto-rejoin returns to the same server and
+  backs off instead of giving up, and schedules close only the clients they started.
+
+Thanks to everyone who sent pull requests. The full list is in the [changelog](CHANGELOG.md).
+
 ## What's new in 2.0
 
 Version 2.0 is a rebuild of the whole interface, and it closes every item that was open on the
