@@ -273,7 +273,6 @@
   "Startup.Refused": "Windows didn't allow the startup entry.",
   "Startup.Unlock.Title": "Unlock your accounts",
   "Startup.Unlock.Body": "The account file is protected with a master password.",
-  "Startup.WrongPassword.Title": "Wrong password",
   "Startup.WrongPassword.Body": "That password didn't work. Try again.",
   "Startup.Unreadable.Title": "The account file can't be read",
   "Startup.Unreadable.Body": "Your saved accounts couldn't be decrypted. This usually means the file was copied from another Windows user or PC, because its encryption is tied to the Windows account that wrote it.\n\nNothing was changed or deleted. The file is in:\n{0}\n\nThe app closes now so the file stays intact.",

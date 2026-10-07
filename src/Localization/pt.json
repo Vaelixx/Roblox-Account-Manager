@@ -274,7 +274,6 @@
   "Startup.Refused": "O Windows não permitiu a entrada de inicialização.",
   "Startup.Unlock.Title": "Desbloquear suas contas",
   "Startup.Unlock.Body": "O arquivo de contas está protegido por uma senha mestra.",
-  "Startup.WrongPassword.Title": "Senha incorreta",
   "Startup.WrongPassword.Body": "Essa senha não funcionou. Tente de novo.",
   "Startup.Unreadable.Title": "Não é possível ler o arquivo de contas",
   "Startup.Unreadable.Body": "Não foi possível descriptografar suas contas salvas. Geralmente isso significa que o arquivo foi copiado de outro usuário do Windows ou de outro PC, porque a criptografia fica ligada à conta do Windows que o gravou.\n\nNada foi alterado ou excluído. O arquivo está em:\n{0}\n\nO app vai fechar agora para manter o arquivo intacto.",

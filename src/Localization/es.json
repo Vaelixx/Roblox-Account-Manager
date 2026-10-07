@@ -274,7 +274,6 @@
   "Startup.Refused": "Windows no permitió la entrada de inicio.",
   "Startup.Unlock.Title": "Desbloquear tus cuentas",
   "Startup.Unlock.Body": "El archivo de cuentas está protegido con una contraseña maestra.",
-  "Startup.WrongPassword.Title": "Contraseña incorrecta",
   "Startup.WrongPassword.Body": "Esa contraseña no funcionó. Inténtalo de nuevo.",
   "Startup.Unreadable.Title": "No se puede leer el archivo de cuentas",
   "Startup.Unreadable.Body": "No se pudieron descifrar tus cuentas guardadas. Normalmente significa que el archivo se copió desde otro usuario de Windows u otro PC, porque el cifrado está ligado a la cuenta de Windows que lo escribió.\n\nNo se cambió ni se eliminó nada. El archivo está en:\n{0}\n\nLa app se cerrará ahora para que el archivo quede intacto.",

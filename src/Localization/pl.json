@@ -289,7 +289,6 @@
   "Startup.Refused": "Windows nie zezwolił na wpis autostartu.",
   "Startup.Unlock.Title": "Odblokuj konta",
   "Startup.Unlock.Body": "Plik kont jest chroniony hasłem głównym.",
-  "Startup.WrongPassword.Title": "Nieprawidłowe hasło",
   "Startup.WrongPassword.Body": "To hasło nie zadziałało. Spróbuj ponownie.",
   "Startup.Unreadable.Title": "Nie można odczytać pliku kont",
   "Startup.Unreadable.Body": "Nie udało się odszyfrować zapisanych kont. Zwykle oznacza to, że plik skopiowano od innego użytkownika Windows lub z innego komputera, bo szyfrowanie jest powiązane z kontem Windows, które go zapisało.\n\nNiczego nie zmieniono ani nie usunięto. Plik znajduje się w:\n{0}\n\nAplikacja zostanie teraz zamknięta, aby plik pozostał nienaruszony.",

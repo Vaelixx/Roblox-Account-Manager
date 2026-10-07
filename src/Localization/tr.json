@@ -274,7 +274,6 @@
   "Startup.Refused": "Windows başlangıç kaydına izin vermedi.",
   "Startup.Unlock.Title": "Hesaplarınızın kilidini açın",
   "Startup.Unlock.Body": "Hesap dosyası bir ana parola ile korunuyor.",
-  "Startup.WrongPassword.Title": "Yanlış parola",
   "Startup.WrongPassword.Body": "Bu parola işe yaramadı. Tekrar deneyin.",
   "Startup.Unreadable.Title": "Hesap dosyası okunamıyor",
   "Startup.Unreadable.Body": "Kayıtlı hesaplarınızın şifresi çözülemedi. Bu genellikle dosyanın başka bir Windows kullanıcısından veya bilgisayardan kopyalandığı anlamına gelir, çünkü şifreleme onu yazan Windows hesabına bağlıdır.\n\nHiçbir şey değiştirilmedi veya silinmedi. Dosya şurada:\n{0}\n\nDosya bozulmadan kalsın diye uygulama şimdi kapanacak.",
