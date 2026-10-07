@@ -523,7 +523,7 @@
   "Add.SigningIn": "Connexion à Roblox…",
   "Add.CheckingCode": "Vérification du code…",
   "Add.SignedInAdding": "Connecté. Ajout du compte…",
-  "Add.UseBrowserInstead": "Roblox demande un captcha pour cette connexion. Passez à l'onglet Navigateur pour la terminer sur la page de Roblox.",
+  "Add.UseBrowserInstead": "Roblox veut vérifier cette connexion sur sa propre page (un captcha ou un autre contrôle de sécurité), que cette application ne peut pas afficher. Appuyez sur Ouvrir la fenêtre de connexion pour la terminer dans le navigateur.",
   "Remove.Title": "Retirer le compte ?",
   "Remove.Body": "{0} sera retiré du gestionnaire. Le compte Roblox lui-même n'est pas touché.",
   "Remove.Action": "Retirer",

@@ -552,7 +552,7 @@
   "Add.SigningIn": "Logowanie do Roblox…",
   "Add.CheckingCode": "Sprawdzanie kodu…",
   "Add.SignedInAdding": "Zalogowano. Dodawanie konta…",
-  "Add.UseBrowserInstead": "Roblox wymaga captcha do tego logowania. Przejdź do karty Przeglądarka, aby dokończyć je na stronie Roblox.",
+  "Add.UseBrowserInstead": "Roblox chce sprawdzić to logowanie na własnej stronie (captcha lub inna kontrola bezpieczeństwa), której ta aplikacja nie może wyświetlić. Naciśnij Otwórz okno logowania, aby dokończyć je w przeglądarce.",
   "Remove.Title": "Usunąć konto?",
   "Remove.Body": "{0} zostanie usunięte z menedżera. Samo konto Roblox pozostaje bez zmian.",
   "Remove.Action": "Usuń",

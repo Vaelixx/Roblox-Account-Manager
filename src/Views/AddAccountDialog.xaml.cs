@@ -218,10 +218,13 @@ public partial class AddAccountDialog : Window
                 return;
 
             case RobloxAuthService.LoginOutcome.ChallengeRequired:
-                // Roblox wants a captcha — only a real browser can show it.
+                // Roblox wants a check only its own page can run (a captcha, or the invisible proof-of-work
+                // check it now asks most sign-ins for). Switch to the browser tab, one click from finishing;
+                // the tab switch clears the status line, so the hint goes up after it.
                 ClearTwoFactor();
                 SetWorking(false);
-                ShowStatus(L.T("Add.UseBrowserInstead"), Tone.Error);
+                BrowserTab.IsChecked = true;
+                ShowStatus(L.T("Add.UseBrowserInstead"), Tone.Info);
                 return;
 
             default:

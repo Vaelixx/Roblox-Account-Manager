@@ -523,7 +523,7 @@
   "Add.SigningIn": "Anmeldung bei Roblox…",
   "Add.CheckingCode": "Code wird geprüft…",
   "Add.SignedInAdding": "Angemeldet. Konto wird hinzugefügt…",
-  "Add.UseBrowserInstead": "Roblox verlangt für diese Anmeldung ein Captcha. Wechsle zum Tab Browser, um sie auf der Roblox-Seite abzuschließen.",
+  "Add.UseBrowserInstead": "Roblox möchte diese Anmeldung auf der eigenen Seite prüfen (ein Captcha oder eine andere Sicherheitsprüfung), die diese App nicht anzeigen kann. Drücke Anmeldefenster öffnen, um sie im Browser abzuschließen.",
   "Remove.Title": "Konto entfernen?",
   "Remove.Body": "{0} wird aus dem Manager entfernt. Das Roblox-Konto selbst bleibt unberührt.",
   "Remove.Action": "Entfernen",

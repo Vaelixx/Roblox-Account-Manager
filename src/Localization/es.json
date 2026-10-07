@@ -523,7 +523,7 @@
   "Add.SigningIn": "Iniciando sesión en Roblox…",
   "Add.CheckingCode": "Comprobando el código…",
   "Add.SignedInAdding": "Sesión iniciada. Añadiendo la cuenta…",
-  "Add.UseBrowserInstead": "Roblox pide un captcha para este inicio de sesión. Cambia a la pestaña Navegador para completarlo en la página de Roblox.",
+  "Add.UseBrowserInstead": "Roblox quiere comprobar este inicio de sesión en su propia página (un captcha u otra verificación de seguridad), que esta app no puede mostrar. Pulsa Abrir ventana de inicio para completarlo en el navegador.",
   "Remove.Title": "¿Quitar la cuenta?",
   "Remove.Body": "{0} se quitará del gestor. La cuenta de Roblox en sí no se ve afectada.",
   "Remove.Action": "Quitar",

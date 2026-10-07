@@ -523,7 +523,7 @@
   "Add.SigningIn": "Roblox'a giriş yapılıyor…",
   "Add.CheckingCode": "Kod kontrol ediliyor…",
   "Add.SignedInAdding": "Giriş yapıldı. Hesap ekleniyor…",
-  "Add.UseBrowserInstead": "Roblox bu giriş için captcha istiyor. Roblox sayfasında tamamlamak için Tarayıcı sekmesine geçin.",
+  "Add.UseBrowserInstead": "Roblox bu girişi kendi sayfasında doğrulamak istiyor (captcha veya başka bir güvenlik kontrolü) ve bu uygulama bunu gösteremiyor. Tarayıcıda tamamlamak için Giriş penceresini aç düğmesine basın.",
   "Remove.Title": "Hesap kaldırılsın mı?",
   "Remove.Body": "{0} yöneticiden kaldırılacak. Roblox hesabının kendisi etkilenmez.",
   "Remove.Action": "Kaldır",

@@ -523,7 +523,7 @@
   "Add.SigningIn": "Entrando no Roblox…",
   "Add.CheckingCode": "Verificando o código…",
   "Add.SignedInAdding": "Login feito. Adicionando a conta…",
-  "Add.UseBrowserInstead": "O Roblox pediu um captcha para este login. Mude para a aba Navegador para concluir na página do Roblox.",
+  "Add.UseBrowserInstead": "O Roblox quer verificar este login na própria página (um captcha ou outra verificação de segurança), que este app não consegue mostrar. Clique em Abrir janela de login para concluir no navegador.",
   "Remove.Title": "Remover a conta?",
   "Remove.Body": "{0} será removida do gerenciador. A conta do Roblox em si não é afetada.",
   "Remove.Action": "Remover",

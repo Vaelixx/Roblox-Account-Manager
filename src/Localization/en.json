@@ -522,7 +522,7 @@
   "Add.SigningIn": "Signing in to Roblox…",
   "Add.CheckingCode": "Checking the code…",
   "Add.SignedInAdding": "Signed in. Adding the account…",
-  "Add.UseBrowserInstead": "Roblox wants a captcha for this sign-in. Switch to the Browser tab to finish it on Roblox's page.",
+  "Add.UseBrowserInstead": "Roblox wants to check this sign-in on its own page (a captcha or another security check), which this app can't show. Press Open sign-in window to finish it in the browser.",
   "Remove.Title": "Remove account?",
   "Remove.Body": "{0} will be removed from the manager. The Roblox account itself isn't affected.",
   "Remove.Action": "Remove",

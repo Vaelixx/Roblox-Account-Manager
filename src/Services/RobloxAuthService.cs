@@ -181,6 +181,8 @@ public static class RobloxAuthService
                         }
                     }
 
+                    // The type only (never the metadata): it tells a captcha from a browser check in a report.
+                    DiagnosticsService.Log("auth", $"Roblox asked for a '{(type.Length > 0 ? type : "unknown")}' check before signing in (HTTP {(int)resp.StatusCode})");
                     return new(LoginOutcome.ChallengeRequired, L.T("Auth.Challenge"));
                 }
 
