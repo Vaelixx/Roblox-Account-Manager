@@ -15,6 +15,14 @@ public partial class MessageDialog : Window
     /// <summary>Minimum length for <see cref="Kind.NewPassword"/>; OK stays disabled until it is met.</summary>
     public int MinLength { get; init; } = 1;
 
+    /// <summary>
+    /// Optional check for <see cref="Kind.Password"/>, run when OK is pressed: null accepts the entry,
+    /// anything else is shown under the box and the dialog stays open for another try.
+    /// </summary>
+    public Func<string, Task<string?>>? Validate { get; init; }
+
+    private bool _validating;
+
     public MessageDialog(Kind kind, string title, string message, string initial = "",
         string okText = "OK", bool showCancel = true, string cancelText = "Cancel", bool danger = false)
     {
@@ -108,10 +116,41 @@ public partial class MessageDialog : Window
         }
     }
 
-    private void Ok_Click(object sender, RoutedEventArgs e)
+    private async void Ok_Click(object sender, RoutedEventArgs e)
     {
-        if (!OkBtn.IsEnabled) return;
-        ResultText = _kind is Kind.Password or Kind.NewPassword ? Password.Password : Input.Text;
+        if (!OkBtn.IsEnabled || _validating) return;
+        string text = _kind is Kind.Password or Kind.NewPassword ? Password.Password : Input.Text;
+
+        if (Validate != null)
+        {
+            _validating = true;
+            OkBtn.IsEnabled = false;
+            string? error;
+            try { error = await Validate(text); }
+            catch (Exception ex)
+            {
+                DiagnosticsService.Warn("dialog", "Checking the entry failed", ex);
+                error = L.T("Common.SomethingWentWrong");
+            }
+            finally
+            {
+                _validating = false;
+                OkBtn.IsEnabled = true;
+            }
+
+            if (!IsVisible) return;   // closed (Esc) while the check ran
+            if (error != null)
+            {
+                PasswordHint.Text = error;
+                PasswordHint.SetResourceReference(ForegroundProperty, "DangerBrush");
+                PasswordHint.Visibility = Visibility.Visible;
+                Password.Clear();
+                Password.Focus();
+                return;
+            }
+        }
+
+        ResultText = text;
         DialogResult = true;
     }
 

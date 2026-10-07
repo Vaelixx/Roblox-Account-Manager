@@ -15,6 +15,9 @@ public static class SingleInstanceService
 {
     private const string PipeName = "RobloxAccountManager.Modern.Cli";
 
+    /// <summary>Sent by a second start without arguments: the running instance shows its window.</summary>
+    public const string ShowFlag = "--show";
+
     private static CancellationTokenSource? _cts;
 
     /// <summary>

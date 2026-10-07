@@ -71,8 +71,10 @@ public partial class App : Application
         if (!isNew)
         {
             // Already running. If we were started to perform an action (e.g. --launch),
-            // forward it to the live instance and exit quietly; otherwise just surface it.
-            if (CliService.HasActionableArgs(e.Args) && SingleInstanceService.TrySendToPrimary(e.Args))
+            // forward it to the live instance and exit quietly; otherwise bring its window back
+            // (from the tray too). Only when it can't be reached is the user told to look for it.
+            string[] forward = CliService.HasActionableArgs(e.Args) ? e.Args : new[] { SingleInstanceService.ShowFlag };
+            if (SingleInstanceService.TrySendToPrimary(forward))
             {
                 Shutdown();
                 return;
@@ -98,6 +100,13 @@ public partial class App : Application
         LocalizationService.Apply(LocalizationService.ResolveInitial(SettingsService.Current.Language));
         ThemeService.Apply(SettingsService.Current);   // paint the saved palette before the window shows
 
+        // Until the main window exists, closing a window must not end the app. WPF makes the first
+        // window it creates the MainWindow — here the unlock prompt — and with OnMainWindowClose,
+        // closing that prompt started the shutdown: every window after it (the "wrong password"
+        // message, the next prompt, even the main window) was silently never shown, and the
+        // process sat in the background without a window.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         var vm = new MainViewModel();
         if (!LoadAccounts(vm.Store))
         {
@@ -107,6 +116,7 @@ public partial class App : Application
 
         var window = new MainWindow(vm);
         MainWindow = window;
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
         window.Show();
 
 #if DEBUG
@@ -127,8 +137,13 @@ public partial class App : Application
 
         WireBackgroundServices(vm);
 
-        // Listen for CLI requests forwarded by later instances (e.g. `RAM.exe --launch …`).
-        SingleInstanceService.StartServer(a => _ = CliService.HandleAsync(vm, a));
+        // Listen for CLI requests forwarded by later instances (e.g. `RAM.exe --launch …`), and for a
+        // plain second start, which just brings this window back.
+        SingleInstanceService.StartServer(a =>
+        {
+            if (a.Length == 1 && a[0] == SingleInstanceService.ShowFlag) window.BringToFront();
+            else _ = CliService.HandleAsync(vm, a);
+        });
 
         // Honour a CLI launch that started *this* (primary) instance, now that accounts are ready.
         if (CliService.HasActionableArgs(e.Args))
@@ -292,20 +307,20 @@ public partial class App : Application
             return true;
         }
 
-        // Password-protected: prompt until correct or the user cancels.
+        // Password-protected: one prompt that stays open until the password is right or the user
+        // cancels (which exits the app). A wrong password is reported inside the prompt.
         int failures = 0;
-        while (true)
-        {
-            string? pw = DialogService.PromptPassword(L.T("Startup.Unlock.Title"), L.T("Startup.Unlock.Body"), L.T("Lock.Unlock"));
-            if (pw == null) return false; // cancelled -> exit app
+        string? pw = DialogService.PromptPassword(L.T("Startup.Unlock.Title"), L.T("Startup.Unlock.Body"), L.T("Lock.Unlock"),
+            async candidate =>
+            {
+                if (store.Load(candidate)) return null;
 
-            if (store.Load(pw)) return true;
-
-            // Slow down guessing a little more with every wrong password.
-            failures++;
-            if (failures >= 3) Thread.Sleep(Math.Min(10, failures) * 400);
-            DialogService.Info(L.T("Startup.WrongPassword.Title"), L.T("Startup.WrongPassword.Body"));
-        }
+                // Slow down guessing a little more with every wrong password.
+                failures++;
+                if (failures >= 3) await Task.Delay(Math.Min(10, failures) * 400);
+                return L.T("Startup.WrongPassword.Body");
+            });
+        return pw != null;
     }
 
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

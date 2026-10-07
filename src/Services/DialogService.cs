@@ -82,9 +82,17 @@ public static class DialogService
         return ShowModal(dlg) == true ? dlg.ResultText : null;
     }
 
-    public static string? PromptPassword(string title, string message, string? okText = null)
+    /// <summary>
+    /// Asks for a password. With <paramref name="validate"/> the prompt stays open until the check
+    /// passes: it returns null for a good password or the message to show under the box.
+    /// </summary>
+    public static string? PromptPassword(string title, string message, string? okText = null,
+        Func<string, Task<string?>>? validate = null)
     {
-        var dlg = new MessageDialog(MessageDialog.Kind.Password, title, message, "", okText ?? L.T("Common.Ok"), true, L.T("Common.Cancel"));
+        var dlg = new MessageDialog(MessageDialog.Kind.Password, title, message, "", okText ?? L.T("Common.Ok"), true, L.T("Common.Cancel"))
+        {
+            Validate = validate,
+        };
         return ShowModal(dlg) == true ? dlg.ResultText : null;
     }
 
