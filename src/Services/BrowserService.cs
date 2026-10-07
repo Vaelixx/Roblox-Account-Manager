@@ -251,42 +251,55 @@ public static class BrowserService
                 if (liveness.Observe(reachable, pages))
                     return new(false, L.T("Browser.Login.Closed"), null);
 
-                if (reachable && socket is not { State: WebSocketState.Open })
+                // Closing the window drops the DevTools connection, usually in the middle of a request.
+                // That is not an error to show: the socket is dropped and the probe above decides on
+                // the next passes whether the window is gone (reported as closed) or still there
+                // (reconnect below).
+                try
                 {
-                    // The DevTools connection dropped while the browser is still there: reconnect.
+                    if (reachable && socket is not { State: WebSocketState.Open })
+                    {
+                        // The DevTools connection dropped while the browser is still there: reconnect.
+                        try { socket?.Dispose(); } catch { }
+                        socket = null;
+                        string? again = pageTarget
+                            ? await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(5)).ConfigureAwait(false)
+                            : await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                        if (again == null) { await Task.Delay(1000, ct).ConfigureAwait(false); continue; }
+                        socket = await ConnectAsync(again, ct).ConfigureAwait(false);
+                        if (pageTarget) (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
+                    }
+
+                    if (socket is { State: WebSocketState.Open })
+                    {
+                        var (cookie, unsupported) = await TryReadSessionCookieAsync(socket, ++id, method, ct).ConfigureAwait(false);
+                        if (cookie != null)
+                        {
+                            progress?.Report(L.T("Browser.Login.Captured"));
+                            return new(true, "", cookie);
+                        }
+
+                        // Some builds do not expose Storage.getCookies on the browser target; switch to a
+                        // page target's Network domain once and keep polling.
+                        if (unsupported && !pageTarget)
+                        {
+                            string? pageWs = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                            if (pageWs == null) return new(false, L.T("Browser.DebuggerTimeout", browser.Engine), null);
+
+                            try { socket.Dispose(); } catch { }
+                            socket = null;
+                            socket = await ConnectAsync(pageWs, ct).ConfigureAwait(false);
+                            pageTarget = true;
+                            method = "Network.getAllCookies";
+                            (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
+                            continue;
+                        }
+                    }
+                }
+                catch (Exception ex) when (IsConnectionLoss(ex, ct))
+                {
                     try { socket?.Dispose(); } catch { }
                     socket = null;
-                    string? again = pageTarget
-                        ? await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(5)).ConfigureAwait(false)
-                        : await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-                    if (again == null) { await Task.Delay(1000, ct).ConfigureAwait(false); continue; }
-                    socket = await ConnectAsync(again, ct).ConfigureAwait(false);
-                    if (pageTarget) (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
-                }
-
-                if (socket is { State: WebSocketState.Open })
-                {
-                    var (cookie, unsupported) = await TryReadSessionCookieAsync(socket, ++id, method, ct).ConfigureAwait(false);
-                    if (cookie != null)
-                    {
-                        progress?.Report(L.T("Browser.Login.Captured"));
-                        return new(true, "", cookie);
-                    }
-
-                    // Some builds do not expose Storage.getCookies on the browser target; switch to a
-                    // page target's Network domain once and keep polling.
-                    if (unsupported && !pageTarget)
-                    {
-                        string? pageWs = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-                        if (pageWs == null) return new(false, L.T("Browser.DebuggerTimeout", browser.Engine), null);
-
-                        try { socket.Dispose(); } catch { }
-                        socket = await ConnectAsync(pageWs, ct).ConfigureAwait(false);
-                        pageTarget = true;
-                        method = "Network.getAllCookies";
-                        (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
-                        continue;
-                    }
                 }
 
                 await Task.Delay(1000, ct).ConfigureAwait(false);
@@ -355,6 +368,14 @@ public static class BrowserService
             WipeProfileWithRetry(profileDir);
         }
     }
+
+    /// <summary>
+    /// The DevTools connection went away under a request (the window was closed, the browser quit or
+    /// restarted its endpoint) — as opposed to the user pressing Stop, which must still cancel.
+    /// </summary>
+    private static bool IsConnectionLoss(Exception ex, CancellationToken ct)
+        => ex is WebSocketException or IOException or ObjectDisposedException or HttpRequestException
+           || (ex is OperationCanceledException && !ct.IsCancellationRequested);
 
     private static async Task<ClientWebSocket> ConnectAsync(string wsUrl, CancellationToken ct)
     {
