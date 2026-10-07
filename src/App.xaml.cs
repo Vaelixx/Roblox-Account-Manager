@@ -85,6 +85,7 @@ public partial class App : Application
             return;
         }
 
+        _isPrimary = true;
         DispatcherUnhandledException += OnUnhandledException;
 
         // Central diagnostics sink. Installed before anything else runs so the very first
@@ -94,19 +95,48 @@ public partial class App : Application
 
         base.OnStartup(e);
 
-        SettingsService.Load();
-#if DEBUG
-        DemoMode.AdjustSettings(SettingsService.Current);
-#endif
-        LocalizationService.Apply(LocalizationService.ResolveInitial(SettingsService.Current.Language));
-        ThemeService.Apply(SettingsService.Current);   // paint the saved palette before the window shows
-
         // Until the main window exists, closing a window must not end the app. WPF makes the first
         // window it creates the MainWindow — here the unlock prompt — and with OnMainWindowClose,
         // closing that prompt started the shutdown: every window after it (the "wrong password"
         // message, the next prompt, even the main window) was silently never shown, and the
         // process sat in the background without a window.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // Listen for a second start from the beginning, so one made while the unlock prompt is open
+        // brings that prompt forward instead of claiming the manager is in the tray.
+        SingleInstanceService.StartServer(OnForwarded);
+
+        try
+        {
+            StartUp(e.Args, updateTempDir);
+        }
+        catch (Exception ex)
+        {
+            // With the explicit shutdown mode a failure here would otherwise leave a process without a
+            // window that keeps the single-instance lock, so every later start says "already running".
+            DiagnosticsService.Error("app", "Startup failed", ex);
+            MessageBox.Show(L.T("App.UnexpectedError", ex.Message, DiagnosticsService.LogPath),
+                "Roblox Account Manager", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+        }
+    }
+
+    // Set once this copy owns the single-instance lock and runs the app (not a second start that only
+    // hands over, and not the updater copy).
+    private static bool _isPrimary;
+
+    // Launch requests a second start forwarded before the accounts were open; run once they are.
+    private static MainViewModel? _readyVm;
+    private static readonly List<string[]> _pendingCli = new();
+
+    private void StartUp(string[] args, string? updateTempDir)
+    {
+        SettingsService.Load();
+#if DEBUG
+        DemoMode.AdjustSettings(SettingsService.Current);
+#endif
+        LocalizationService.Apply(LocalizationService.ResolveInitial(SettingsService.Current.Language));
+        ThemeService.Apply(SettingsService.Current);   // paint the saved palette before the window shows
 
         var vm = new MainViewModel();
         if (!LoadAccounts(vm.Store))
@@ -133,22 +163,22 @@ public partial class App : Application
         // OnSourceInitialized, which only runs once the window has a handle. Hiding straight after
         // gives a tray-only start without a window ever flashing up.
         if (SettingsService.Current.StartMinimized
-            && e.Args.Contains(StartupService.StartupArg, StringComparer.OrdinalIgnoreCase))
+            && args.Contains(StartupService.StartupArg, StringComparer.OrdinalIgnoreCase))
             window.HideToTray();
 
         WireBackgroundServices(vm);
 
-        // Listen for CLI requests forwarded by later instances (e.g. `RAM.exe --launch …`), and for a
-        // plain second start, which just brings this window back.
-        SingleInstanceService.StartServer(a =>
-        {
-            if (a.Length == 1 && a[0] == SingleInstanceService.ShowFlag) window.BringToFront();
-            else _ = CliService.HandleAsync(vm, a);
-        });
+        // Update check and "what's new" only now: a prompt over the unlock dialog could start an
+        // update before the accounts were even read.
+        vm.StartAfterUnlock();
+
+        _readyVm = vm;
+        foreach (var queued in _pendingCli) _ = CliService.HandleAsync(vm, queued);
+        _pendingCli.Clear();
 
         // Honour a CLI launch that started *this* (primary) instance, now that accounts are ready.
-        if (CliService.HasActionableArgs(e.Args))
-            _ = CliService.HandleAsync(vm, e.Args);
+        if (CliService.HasActionableArgs(args))
+            _ = CliService.HandleAsync(vm, args);
 
         if (updateTempDir != null)
             _ = Task.Run(() => CleanupUpdateDirAsync(updateTempDir));
@@ -156,6 +186,22 @@ public partial class App : Application
         // Privacy sweep: remove app-browser profiles a crash or forced shutdown left behind,
         // so no cookie/site data from a previous session stays readable on disk.
         _ = Task.Run(BrowserService.CleanupLeftoverProfiles);
+    }
+
+    /// <summary>
+    /// A request from a later start of the exe (on the UI thread): a plain second start brings the
+    /// window back, also from the tray; a CLI launch runs, or waits until the accounts are open.
+    /// </summary>
+    private static void OnForwarded(string[] args)
+    {
+        if (args.Length == 1 && args[0] == SingleInstanceService.ShowFlag)
+        {
+            if (Current?.MainWindow is MainWindow main) main.BringToFront();
+            else Current?.MainWindow?.Activate();   // still at the unlock prompt
+            return;
+        }
+        if (_readyVm is { } vm) _ = CliService.HandleAsync(vm, args);
+        else _pendingCli.Add(args);
     }
 
     /// <summary>
@@ -305,6 +351,7 @@ public partial class App : Application
                 DialogService.Info(L.T("Startup.Unreadable.Title"), L.T("Startup.Unreadable.Body", Paths.DataDir));
                 return false;
             }
+            if (store.LooksEmptiedByUpdate) OfferBackupRestore(store);
             return true;
         }
 
@@ -324,6 +371,25 @@ public partial class App : Application
         return pw != null;
     }
 
+    /// <summary>
+    /// In 2.0, pressing "Update now" in the prompt that appeared over the unlock dialog saved the
+    /// never-opened store: accounts.dat became an empty file without a master password and the real
+    /// one survived only as accounts.bak, which the next save would overwrite. Bring it back before
+    /// anything saves, or, if the user declines, move it aside untouched.
+    /// </summary>
+    private static void OfferBackupRestore(AccountStore store)
+    {
+        string? pw = DialogService.PromptPassword(L.T("Startup.Recover.Title"), L.T("Startup.Recover.Body"), L.T("Startup.Recover.Action"),
+            candidate => Task.FromResult(store.TryRestoreBackup(candidate) ? null : L.T("Lock.Wrong")));
+        if (pw != null)
+        {
+            DiagnosticsService.Warn("store", $"Restored {store.Accounts.Count} account(s) from the password-protected backup");
+            return;
+        }
+        string? kept = store.KeepBackupAside();
+        DiagnosticsService.Warn("store", $"Password-protected account backup not restored; kept as {kept ?? "accounts.bak (could not be moved)"}");
+    }
+
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         DiagnosticsService.Error("ui", "Unhandled dispatcher exception", e.Exception);
@@ -334,7 +400,10 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (AppInfo.IsDemo) { base.OnExit(e); return; }
+        // A second start that only handed over to the running copy, and the updater copy, never
+        // started anything. Tearing down here wrote their empty playtime history over the real one
+        // and wiped the running copy's browser profiles.
+        if (AppInfo.IsDemo || !_isPrimary) { base.OnExit(e); return; }
 
         SingleInstanceService.StopServer();
         // Book every client still running: once this process is gone nothing observes them, and
@@ -352,6 +421,11 @@ public partial class App : Application
         LauncherService.ReleaseMultiInstance();
         ClipboardService.ClearSecretIfPresent();
         BrowserService.CleanupLeftoverProfiles(); // still-open browsers keep locks; next start re-sweeps
+
+        // Hand the single-instance lock back now rather than whenever the process is torn down, so a
+        // start right after this one closes doesn't see "already running".
+        try { _instanceMutex?.ReleaseMutex(); } catch { }
+        try { _instanceMutex?.Dispose(); } catch { }
         base.OnExit(e);
     }
 }

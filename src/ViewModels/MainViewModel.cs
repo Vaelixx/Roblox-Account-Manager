@@ -226,23 +226,29 @@ public class MainViewModel : ObservableObject
         DialogService.ModalStateChanged += () => OnPropertyChanged(nameof(IsModalOpen));
         ProcessRegistry.Changed += OnClientsChanged;
 
-        if (!s_updateCheckStarted && SettingsService.Current.CheckUpdatesOnStartup && !AppInfo.IsDemo)
-        {
-            s_updateCheckStarted = true;
-            _ = CheckForUpdateAsync();
-        }
-        if (!AppInfo.IsDemo)
-        {
-            ApplyUpdateSchedule();
-            _ = ShowWhatsNewIfUpdatedAsync();
-        }
-
         PlaytimeService.Start();
         PlaytimeService.Changed += OnPlaytimeChanged;
         RefreshPlaytime();
         Store.Accounts.CollectionChanged += (_, _) => RefreshPlaytime();
 
         if (!AppInfo.IsDemo) StartupService.Reconcile(SettingsService.Current.StartWithWindows);
+    }
+
+    /// <summary>
+    /// Starts the update check, its schedule and the post-update "what's new". Called by the app
+    /// once the accounts are open: a prompt over the unlock dialog could otherwise start an update,
+    /// which saves the store, before the store was even read.
+    /// </summary>
+    public void StartAfterUnlock()
+    {
+        if (AppInfo.IsDemo) return;
+        if (!s_updateCheckStarted && SettingsService.Current.CheckUpdatesOnStartup)
+        {
+            s_updateCheckStarted = true;
+            _ = CheckForUpdateAsync();
+        }
+        ApplyUpdateSchedule();
+        _ = ShowWhatsNewIfUpdatedAsync();
     }
 
     // ================================================================ groups

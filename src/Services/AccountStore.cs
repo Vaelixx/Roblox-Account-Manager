@@ -27,6 +27,13 @@ public class AccountStore
     /// <summary>Debug demo mode: accounts live in memory only and are never written.</summary>
     internal bool IsReadOnly { get; set; }
 
+    /// <summary>
+    /// Set once <see cref="Load"/> has read the file (or found there is none). Until then the list is
+    /// empty only because nothing has been read yet, and saving it would replace the real file with
+    /// an empty one — what "Update now" over the unlock prompt did in 2.0.
+    /// </summary>
+    private volatile bool _opened;
+
     /// <summary>Raised after a successful save (the Overview refreshes its health panel from it).</summary>
     public event Action? Saved;
 
@@ -49,8 +56,9 @@ public class AccountStore
     /// <summary>Loads accounts. Returns false if a (wrong/missing) password or a foreign DPAPI key blocked decryption.</summary>
     public bool Load(string? password)
     {
+        _opened = false;
         Accounts.Clear();
-        if (!File.Exists(StorePath)) { MasterPassword = password; return true; }
+        if (!File.Exists(StorePath)) { MasterPassword = password; _opened = true; return true; }
 
         try
         {
@@ -69,18 +77,89 @@ public class AccountStore
             }
             if (unreadable > 0)
                 DiagnosticsService.Warn("store", $"{unreadable} account cookie(s) could not be decrypted for this Windows user; they are kept untouched");
+            _opened = true;
             return true;
         }
         catch (Exception ex)
         {
+            Accounts.Clear();
             DiagnosticsService.Warn("store", "Account store could not be opened", ex);
             return false;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    //  Recovery from the 2.0 update accident
+    // ---------------------------------------------------------------
+
+    /// <summary>
+    /// The trace "Update now" over 2.0's unlock prompt left behind: it saved the never-opened, empty
+    /// store, so accounts.dat became an empty file without a master password while the real,
+    /// password-protected file survived only as accounts.bak.
+    /// </summary>
+    public bool LooksEmptiedByUpdate
+    {
+        get
+        {
+            if (!_opened || MasterPassword != null || Accounts.Count > 0) return false;
+            try { return File.Exists(BackupPath) && Crypto.IsPasswordProtected(File.ReadAllBytes(BackupPath)); }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>
+    /// Makes the password-protected accounts.bak the account file again and opens it. False when the
+    /// password does not open the backup. The empty file is kept aside, never deleted.
+    /// </summary>
+    public bool TryRestoreBackup(string password)
+    {
+        try
+        {
+            Crypto.Decrypt(File.ReadAllBytes(BackupPath), password);   // throws on a wrong password
+        }
+        catch { return false; }
+
+        try
+        {
+            lock (_saveLock)
+            {
+                if (File.Exists(StorePath))
+                    File.Move(StorePath, Paths.InData($"accounts.empty-{DateTime.Now:yyyyMMdd-HHmmss}.dat"));
+                File.Copy(BackupPath, StorePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.Error("store", "The account backup could not be restored", ex);
+            return false;
+        }
+        return Load(password);
+    }
+
+    /// <summary>Moves accounts.bak out of the way, unchanged, so no later save can overwrite it. Returns its new path.</summary>
+    public string? KeepBackupAside()
+    {
+        try
+        {
+            string kept = Paths.InData($"accounts.bak-{DateTime.Now:yyyyMMdd-HHmmss}.kept");
+            lock (_saveLock) File.Move(BackupPath, kept);
+            return kept;
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.Warn("store", "The account backup could not be moved aside", ex);
+            return null;
         }
     }
 
     public void Save()
     {
         if (IsReadOnly) return;
+        if (!_opened)
+        {
+            DiagnosticsService.Warn("store", "Not saved: the account store has not been opened yet");
+            return;
+        }
 
         long saveId = Interlocked.Increment(ref _nextSaveId);
 
