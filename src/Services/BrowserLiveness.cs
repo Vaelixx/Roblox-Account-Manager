@@ -29,7 +29,9 @@ public sealed class BrowserLiveness
             _misses = 0;
             return false;
         }
-        if (endpointReachable && !_sawPage) return false;
+        // Answering without a page before any page was seen is not a miss, and it breaks a run of misses
+        // like any other answer: only misses in a row count.
+        if (endpointReachable && !_sawPage) { _misses = 0; return false; }
         return ++_misses >= ClosedAfter;
     }
 }

@@ -100,6 +100,18 @@ public class BrowserLivenessTests
     }
 
     [Fact]
+    public void Misses_that_are_not_in_a_row_do_not_add_up_before_a_page_was_seen()
+    {
+        // A browser that lists its window under another target type, with a slow probe now and then.
+        var l = new BrowserLiveness();
+        for (int i = 0; i < 5; i++)
+        {
+            Assert.False(l.Observe(false, 0));
+            Assert.False(l.Observe(true, 0));
+        }
+    }
+
+    [Fact]
     public void Never_reachable_counts_as_closed()
     {
         // The window was closed before the first probe: no page was ever seen, but the misses count all the same.

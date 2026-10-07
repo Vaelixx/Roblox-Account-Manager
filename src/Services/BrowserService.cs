@@ -215,11 +215,11 @@ public static class BrowserService
             }
 
             // The browser-level endpoint survives every navigation the login flow performs.
-            string? wsUrl = await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+            string? wsUrl = await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(20), ct).ConfigureAwait(false);
             bool pageTarget = false;
             if (wsUrl == null)
             {
-                wsUrl = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                wsUrl = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
                 pageTarget = wsUrl != null;
             }
             if (wsUrl == null)
@@ -233,9 +233,10 @@ public static class BrowserService
 
             socket = await ConnectAsync(wsUrl, ct).ConfigureAwait(false);
 
+            // Network.getAllCookies works without Network.enable, which would stream every request of the
+            // sign-in page into the manager — the one carrying the password too.
             int id = 0;
             string method = pageTarget ? "Network.getAllCookies" : "Storage.getCookies";
-            if (pageTarget) (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
 
             progress?.Report(L.T("Browser.Login.Waiting", browser.Engine));
 
@@ -263,11 +264,10 @@ public static class BrowserService
                         try { socket?.Dispose(); } catch { }
                         socket = null;
                         string? again = pageTarget
-                            ? await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(5)).ConfigureAwait(false)
-                            : await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                            ? await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(5), ct).ConfigureAwait(false)
+                            : await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
                         if (again == null) { await Task.Delay(1000, ct).ConfigureAwait(false); continue; }
                         socket = await ConnectAsync(again, ct).ConfigureAwait(false);
-                        if (pageTarget) (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
                     }
 
                     if (socket is { State: WebSocketState.Open })
@@ -283,7 +283,7 @@ public static class BrowserService
                         // page target's Network domain once and keep polling.
                         if (unsupported && !pageTarget)
                         {
-                            string? pageWs = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                            string? pageWs = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
                             if (pageWs == null) return new(false, L.T("Browser.DebuggerTimeout", browser.Engine), null);
 
                             try { socket.Dispose(); } catch { }
@@ -291,7 +291,6 @@ public static class BrowserService
                             socket = await ConnectAsync(pageWs, ct).ConfigureAwait(false);
                             pageTarget = true;
                             method = "Network.getAllCookies";
-                            (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
                             continue;
                         }
                     }
@@ -581,7 +580,7 @@ public static class BrowserService
         return port;
     }
 
-    private static async Task<string?> WaitForPageSocketAsync(int port, TimeSpan timeout)
+    private static async Task<string?> WaitForPageSocketAsync(int port, TimeSpan timeout, CancellationToken ct = default)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var deadline = DateTime.UtcNow + timeout;
@@ -590,22 +589,23 @@ public static class BrowserService
         {
             try
             {
-                string json = await http.GetStringAsync($"http://127.0.0.1:{port}/json");
+                string json = await http.GetStringAsync($"http://127.0.0.1:{port}/json", ct);
                 using var doc = JsonDocument.Parse(json);
                 foreach (var target in doc.RootElement.EnumerateArray())
                 {
                     if (target.TryGetProperty("type", out var ty) && ty.GetString() == "page" &&
-                        target.TryGetProperty("webSocketDebuggerUrl", out var ws))
+                        target.TryGetProperty("webSocketDebuggerUrl", out var ws) && IsOwnDebuggerUrl(ws.GetString(), port, "page"))
                         return ws.GetString();
                 }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch { }
-            await Task.Delay(250);
+            await Task.Delay(250, ct);
         }
         return null;
     }
 
-    private static async Task<string?> WaitForBrowserSocketAsync(int port, TimeSpan timeout)
+    private static async Task<string?> WaitForBrowserSocketAsync(int port, TimeSpan timeout, CancellationToken ct = default)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var deadline = DateTime.UtcNow + timeout;
@@ -614,19 +614,33 @@ public static class BrowserService
         {
             try
             {
-                string json = await http.GetStringAsync($"http://127.0.0.1:{port}/json/version");
+                string json = await http.GetStringAsync($"http://127.0.0.1:{port}/json/version", ct);
                 using var doc = JsonDocument.Parse(json);
                 if (doc.RootElement.TryGetProperty("webSocketDebuggerUrl", out var ws))
                 {
                     string? url = ws.GetString();
-                    if (!string.IsNullOrEmpty(url)) return url;
+                    if (IsOwnDebuggerUrl(url, port, "browser")) return url;
                 }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch { }
-            await Task.Delay(250);
+            await Task.Delay(250, ct);
         }
         return null;
     }
+
+    /// <summary>
+    /// Only a DevTools socket on our own loopback port is used. The port is free when the browser is
+    /// started, so another program could take it first and name any socket — the signed-in window then
+    /// sends the account's cookie there.
+    /// </summary>
+    private static bool IsOwnDebuggerUrl(string? url, int port, string kind)
+        => Uri.TryCreate(url, UriKind.Absolute, out var u)
+           && u.Scheme == "ws"
+           && u.Host == "127.0.0.1"   // the browser names the host we asked it on
+           && u.Port == port
+           && u.UserInfo.Length == 0
+           && u.AbsolutePath.StartsWith("/devtools/" + kind + "/", StringComparison.Ordinal);
 
     /// <summary>
     /// Sends one DevTools command and waits for the reply with the matching id, skipping protocol
@@ -641,13 +655,19 @@ public static class BrowserService
         var buffer = new byte[64 * 1024];
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
 
+        // The deadline also bounds each receive, so an endpoint that answers nothing can't hold the call.
+        // A receive that times out leaves the socket aborted; the callers reconnect or give up.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+
         while (DateTime.UtcNow < deadline && socket.State == WebSocketState.Open)
         {
             using var ms = new MemoryStream();
             WebSocketReceiveResult result;
             do
             {
-                result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
+                try { result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token); }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
                 if (result.MessageType == WebSocketMessageType.Close) return null;
                 ms.Write(buffer, 0, result.Count);
             }
