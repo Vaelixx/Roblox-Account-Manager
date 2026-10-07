@@ -8,15 +8,26 @@ namespace RobloxAccountManager.Services;
 /// <summary>
 /// Cross-process bridge for the single-instance app. The first instance owns the app
 /// (see the mutex in <see cref="App"/>) and runs a named-pipe server; any later instance
-/// started with actionable CLI args (e.g. <c>--launch</c>) forwards them here instead of
-/// opening a second window. Keeps CLI launches working while the app is already open.
+/// forwards its request here instead of opening a second window: CLI args (e.g. <c>--launch</c>)
+/// run in the live instance, and a plain second start brings its window back.
 /// </summary>
+/// <remarks>
+/// A request ends with <see cref="EndOfRequest"/> and is answered with <see cref="Ack"/>, so the
+/// sender knows the running copy understood it. Versions before 2.2 neither end nor answer
+/// requests: their senders close the pipe after writing, and their servers only accept writes.
+/// </remarks>
 public static class SingleInstanceService
 {
     private const string PipeName = "RobloxAccountManager.Modern.Cli";
 
     /// <summary>Sent by a second start without arguments: the running instance shows its window.</summary>
     public const string ShowFlag = "--show";
+
+    private const byte EndOfRequest = 0;
+    private const byte Ack = 6;
+
+    // Bounded read: a forwarded command line is a few hundred bytes, never megabytes.
+    private const int MaxRequestBytes = 8192;
 
     private static CancellationTokenSource? _cts;
 
@@ -46,18 +57,29 @@ public static class SingleInstanceService
                 // CurrentUserOnly: only processes running as this Windows user can connect, so another
                 // account on a shared PC cannot drive launches through the pipe.
                 using var server = new NamedPipeServerStream(
-                    PipeName, PipeDirection.In, 1,
+                    PipeName, PipeDirection.InOut, 1,
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
                 await server.WaitForConnectionAsync(ct);
 
-                // Bounded read: a forwarded command line is a few hundred bytes, never megabytes.
-                var buffer = new char[8192];
-                using var reader = new StreamReader(server, Encoding.UTF8);
-                int length = await reader.ReadBlockAsync(buffer.AsMemory(), ct);
-                string payload = new string(buffer, 0, length);
+                // A sender that connects and then says nothing must not block the next one for good.
+                using var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                readTimeout.CancelAfter(TimeSpan.FromSeconds(5));
 
-                var args = payload.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                var request = new List<byte>();
+                var chunk = new byte[1024];
+                bool ended = false;
+                while (request.Count < MaxRequestBytes)
+                {
+                    int n = await server.ReadAsync(chunk, readTimeout.Token);
+                    if (n == 0) break;   // the sender closed the pipe: an older version, it never waits for an answer
+                    int end = Array.IndexOf(chunk, EndOfRequest, 0, n);
+                    request.AddRange(chunk.Take(end >= 0 ? end : n));
+                    if (end >= 0) { ended = true; break; }
+                }
+
+                var args = Encoding.UTF8.GetString(request.ToArray())
+                                  .Split('\n', StringSplitOptions.RemoveEmptyEntries)
                                   .Select(a => a.Trim('\r'))
                                   .Where(a => a.Length > 0)
                                   .ToArray();
@@ -73,9 +95,20 @@ public static class SingleInstanceService
                     }
                     onArgs(args);
                 });
+
+                if (ended)
+                {
+                    try
+                    {
+                        server.WriteByte(Ack);
+                        server.Flush();
+                        server.WaitForPipeDrain();
+                    }
+                    catch { /* the sender stopped waiting; the request is handled either way */ }
+                }
             }
-            catch (OperationCanceledException) { break; }
-            catch { errored = true; }   // transient pipe error — back off and re-arm
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+            catch { errored = true; }   // transient pipe error or a silent sender — back off and re-arm
 
             if (errored)
             {
@@ -85,19 +118,45 @@ public static class SingleInstanceService
     }
 
     /// <summary>
-    /// Best-effort forward of argv to the running instance. Returns true if a primary
-    /// instance accepted the payload; false if none was reachable within the timeout.
+    /// Forwards argv to the running instance. Returns true once a running instance confirmed it.
     /// </summary>
-    public static bool TrySendToPrimary(string[] args, int timeoutMs = 1500)
+    /// <param name="legacyFallback">
+    /// Also hand the request to a running version older than 2.2, which takes it without confirming.
+    /// Right for <c>--launch</c>, which those versions run; wrong for <see cref="ShowFlag"/>, which
+    /// they ignore — the caller should then tell the user where the running copy is.
+    /// </param>
+    public static bool TrySendToPrimary(string[] args, bool legacyFallback, int timeoutMs = 1500)
     {
+        byte[] payload = Encoding.UTF8.GetBytes(string.Join('\n', args));
+        try
+        {
+            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut,
+                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            client.Connect(timeoutMs);
+            client.Write(payload);
+            client.WriteByte(EndOfRequest);
+            client.Flush();
+
+            using var wait = new CancellationTokenSource(timeoutMs);
+            var answer = new byte[1];
+            int n = client.ReadAsync(answer, wait.Token).AsTask().GetAwaiter().GetResult();
+            return n == 1 && answer[0] == Ack;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // An older running version: its pipe only takes writes, so asking for an answer is refused.
+        }
+        catch { return false; }   // no primary listening, busy, or no answer in time
+
+        if (!legacyFallback) return false;
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out, PipeOptions.CurrentUserOnly);
             client.Connect(timeoutMs);
-            using var writer = new StreamWriter(client, new UTF8Encoding(false)) { AutoFlush = true };
-            writer.Write(string.Join('\n', args));
+            client.Write(payload);
+            client.Flush();
             return true;
         }
-        catch { return false; }   // no primary listening / pipe busy
+        catch { return false; }
     }
 }

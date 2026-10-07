@@ -73,8 +73,9 @@ public partial class App : Application
             // Already running. If we were started to perform an action (e.g. --launch),
             // forward it to the live instance and exit quietly; otherwise bring its window back
             // (from the tray too). Only when it can't be reached is the user told to look for it.
-            string[] forward = CliService.HasActionableArgs(e.Args) ? e.Args : new[] { SingleInstanceService.ShowFlag };
-            if (SingleInstanceService.TrySendToPrimary(forward))
+            bool actionable = CliService.HasActionableArgs(e.Args);
+            string[] forward = actionable ? e.Args : new[] { SingleInstanceService.ShowFlag };
+            if (SingleInstanceService.TrySendToPrimary(forward, legacyFallback: actionable))
             {
                 Shutdown();
                 return;
@@ -159,6 +160,10 @@ public partial class App : Application
         }
 #endif
 
+        // Before hiding to the tray: "lock when hidden" needs the lock to know the store, and the
+        // rest of the background services only start below.
+        LockService.Init(vm.Store);
+
         // Autostart with "start minimized": Show() first regardless — the tray icon is created in
         // OnSourceInitialized, which only runs once the window has a handle. Hiding straight after
         // gives a tray-only start without a window ever flashing up.
@@ -213,8 +218,6 @@ public partial class App : Application
     {
         // Web requests made for an account go through that account's own proxy when it has one.
         RobloxApi.AccountProxyResolver = vm.Store.ProxyForCookie;
-
-        LockService.Init(vm.Store);
 
         // Multi-instance guard. Started here — not only on the launch path — because the whole
         // point is that clients we never launch (website Play button, Roblox home screen,
