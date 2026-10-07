@@ -17,11 +17,34 @@ on:
         required: true
 
 permissions:
-  contents: write        # needed to create the release and upload its assets
+  contents: read
 
 jobs:
-  release:
+  # The unit tests run first, in their own job without write access: the test packages they pull in
+  # never share a runner, a workspace or a token with the build that gets published.
+  test:
     runs-on: windows-latest
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Unit tests
+        shell: pwsh
+        run: dotnet test tests/RobloxAccountManager.Tests/RobloxAccountManager.Tests.csproj -c Release --nologo
+
+  release:
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: write    # needed to create the release and upload its assets
 
     steps:
       - name: Check out the tag
@@ -29,6 +52,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
+          persist-credentials: false   # the release step gets its token directly; git never needs it
 
       - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
@@ -61,10 +85,6 @@ jobs:
         # Every UI string the code uses must exist in English, and every other language must carry the
         # same keys and placeholders — a broken {0} would otherwise only show up on a user's screen.
         run: python tools/check-localization.py
-
-      - name: Unit tests
-        shell: pwsh
-        run: dotnet test tests/RobloxAccountManager.Tests/RobloxAccountManager.Tests.csproj -c Release --nologo
 
       - name: Build (0 warnings required)
         shell: pwsh
