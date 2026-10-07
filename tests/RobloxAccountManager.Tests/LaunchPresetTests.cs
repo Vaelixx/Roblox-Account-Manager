@@ -83,10 +83,17 @@ public class LaunchPresetTests
     }
 
     [Fact]
-    public void Private_server_link_is_never_written_in_clear_text()
+    public void Private_server_link_is_saved_encrypted_and_reads_back()
     {
-        var p = new LaunchPreset { Destination = JoinKind.PrivateServer, PrivateServerLink = "https://www.roblox.com/games/1/x?privateServerLinkCode=TOPSECRET123" };
+        const string link = "https://www.roblox.com/games/1/x?privateServerLinkCode=TOPSECRET123";
+        var p = new LaunchPreset { Destination = JoinKind.PrivateServer, PrivateServerLink = link };
         string json = JsonSerializer.Serialize(p);
         Assert.DoesNotContain("TOPSECRET123", json);
+
+        // DPAPI only exists on Windows, where the app and CI run. Elsewhere the converter fails closed
+        // and saves an empty value, so only the check above can run there.
+        if (!OperatingSystem.IsWindows()) return;
+        Assert.Contains("\"PrivateServerLink\":\"enc1:", json);
+        Assert.Equal(link, JsonSerializer.Deserialize<LaunchPreset>(json)!.PrivateServerLink);
     }
 }
