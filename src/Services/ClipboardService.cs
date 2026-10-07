@@ -21,6 +21,12 @@ public static class ClipboardService
     private static DispatcherTimer? _timer;
     private static string? _pendingSecret;
 
+    // Waits between attempts to clear a secret while another program holds the clipboard. Each attempt
+    // can block the UI for about a second inside WPF's own retries, so they thin out and then stop.
+    private static readonly TimeSpan[] ClearRetries =
+        { TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8) };
+    private static int _clearFailures;
+
     /// <summary>Copies ordinary text. Returns false when the clipboard stayed busy.</summary>
     public static bool CopyText(string text) => TrySet(() => Clipboard.SetText(text));
 
@@ -44,6 +50,7 @@ public static class ClipboardService
 
         int seconds = SettingsService.Current.ClipboardClearSeconds;
         _pendingSecret = text;
+        _clearFailures = 0;
         _timer?.Stop();
         if (seconds > 0)
             ScheduleClear(TimeSpan.FromSeconds(seconds));
@@ -66,8 +73,18 @@ public static class ClipboardService
             Clipboard.Clear();
             _pendingSecret = null;
         }
-        catch (COMException) { ScheduleClear(TimeSpan.FromMilliseconds(500)); }
-        catch (ExternalException) { ScheduleClear(TimeSpan.FromMilliseconds(500)); }
+        catch (ExternalException) { RetryClear(); }   // COMException included: another program holds the clipboard
+    }
+
+    private static void RetryClear()
+    {
+        if (_clearFailures >= ClearRetries.Length)
+        {
+            DiagnosticsService.Warn("clipboard", "A copied secret could not be cleared: another program kept the clipboard busy");
+            _pendingSecret = null;
+            return;
+        }
+        ScheduleClear(ClearRetries[_clearFailures++]);
     }
 
     private static void ScheduleClear(TimeSpan delay)
