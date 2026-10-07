@@ -47,12 +47,18 @@ public class AfkScheduleTests
     }
 
     [Fact]
-    public void Failures_retry_quickly_then_back_off()
+    public void Failures_keep_retrying_every_minute()
     {
-        var normal = TimeSpan.FromMinutes(12);
-        Assert.Equal(TimeSpan.FromMinutes(1), AfkSchedule.AfterFailure(1, normal));
-        Assert.Equal(TimeSpan.FromMinutes(1), AfkSchedule.AfterFailure(3, normal));
-        Assert.Equal(normal, AfkSchedule.AfterFailure(4, normal));
+        Assert.Equal(TimeSpan.FromMinutes(1), AfkSchedule.AfterFailure(TimeSpan.FromMinutes(12)));
+        Assert.Equal(TimeSpan.FromSeconds(30), AfkSchedule.AfterFailure(TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact]
+    public void Focus_time_comes_before_the_first_press()
+    {
+        var rng = new Random(3);
+        Assert.InRange(AfkSchedule.RandomTiming(false, rng, focusSeconds: 5).SettleMs, 5350, 5900);
+        for (int i = 0; i < 100; i++) Assert.InRange(AfkSchedule.PressGapMs(rng), 800, 2500);
     }
 }
 
@@ -142,7 +148,6 @@ public class PerformanceProfileTests
         var defaults = new UltraLowOptions();
         Assert.Empty(PerformanceProfiles.Flags(PerformanceProfiles.Normal, defaults));
         Assert.Equal(0, PerformanceProfiles.FpsCap(PerformanceProfiles.Normal, defaults));
-        Assert.False(PerformanceProfiles.Minimizes(PerformanceProfiles.Normal, defaults));
         Assert.True(PerformanceProfiles.IsKnown(""));
         Assert.False(PerformanceProfiles.IsKnown("Turbo"));
     }
@@ -170,11 +175,10 @@ public class PerformanceProfileTests
         var none = new UltraLowOptions
         {
             LowestQuality = false, NoAntiAliasing = false, LowestTextures = false, NoGrass = false,
-            GraySky = false, FreezeLighting = false, FpsCap = 0, MinimizeWhenInGame = false,
+            GraySky = false, FreezeLighting = false, FpsCap = 0,
         };
         Assert.Empty(PerformanceProfiles.Flags(PerformanceProfiles.UltraLowAfk, none));
         Assert.Equal(0, PerformanceProfiles.FpsCap(PerformanceProfiles.UltraLowAfk, none));
-        Assert.False(PerformanceProfiles.Minimizes(PerformanceProfiles.UltraLowAfk, none));
 
         var onlySky = new UltraLowOptions { LowestQuality = false, NoAntiAliasing = false, LowestTextures = false, NoGrass = false, FreezeLighting = false };
         Assert.Equal(new[] { "FFlagDebugSkyGray" }, PerformanceProfiles.Flags(PerformanceProfiles.UltraLowAfk, onlySky).Keys);

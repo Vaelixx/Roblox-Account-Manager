@@ -5,8 +5,12 @@ namespace RobloxAccountManager.Services;
 /// <summary>
 /// Keeps launched Roblox clients from being idle-kicked. Each tracked client has its own schedule
 /// (<see cref="AfkSchedule"/>); when one is due, the service remembers the window the user is on,
-/// focuses the client, sends a single harmless key tap, then restores the previous window.
-/// One input per interval — nothing that plays the game for you.
+/// focuses the client, lets it keep focus for a few seconds, sends the configured key a few times
+/// with random pauses in between, then restores the previous window. Every wait is random
+/// (<see cref="AfkSchedule.RandomTiming"/>). The same key taps every interval — nothing that plays the game for you.
+///
+/// A client whose log shows it still loading after 45 s gets a visit too: Roblox in the background
+/// can stall mid-load (typically after a reconnect) until its window is focused.
 /// </summary>
 public static class AntiAfkService
 {
@@ -24,7 +28,7 @@ public static class AntiAfkService
     {
         public DateTime NextDueUtc;
         public DateTime? LastSentUtc;
-        public int Failures;
+        public DateTime LastVisitUtc;
     }
 
     private static readonly ConcurrentDictionary<int, ClientState> _clients = new();
@@ -42,6 +46,7 @@ public static class AntiAfkService
         var s = SettingsService.Current;
         // New interval settings: give every client a fresh (staggered) schedule under them.
         foreach (var st in _clients.Values) st.NextDueUtc = DateTime.MinValue;
+        ClientLogWatcher.Apply();   // loading help reads the client logs
         if (s.AntiAfkEnabled) Start();
         else Stop();
     }
@@ -82,7 +87,7 @@ public static class AntiAfkService
                 var st = _clients.GetOrAdd(t.Pid, _ => new ClientState { NextDueUtc = DateTime.MinValue });
                 if (st.NextDueUtc == DateTime.MinValue)
                     st.NextDueUtc = now + AfkSchedule.FirstDelay(s.AntiAfkIntervalMinutes, s.AntiAfkIntervalMaxMinutes, s.AntiAfkRandomize, Random.Shared);
-                else if (st.NextDueUtc <= now)
+                else if (st.NextDueUtc <= now || (s.AntiAfkHelpLoading && StillLoading(t, now) && now - st.LastVisitUtc > TimeSpan.FromSeconds(90)))
                     due.Add(t);
             }
 
@@ -90,6 +95,12 @@ public static class AntiAfkService
         }
         catch (Exception ex) { DiagnosticsService.Warn("anti-afk", "Anti-AFK tick failed", ex); }   // a throwing timer callback kills the process
     }
+
+    /// <summary>Its log shows the client starting, joining or teleporting for at least 45 s.</summary>
+    private static bool StillLoading(ProcessRegistry.Tracked t, DateTime now)
+        => ClientLogWatcher.StateOf(t.Pid) is { } log
+        && log.Phase is ClientPhase.Starting or ClientPhase.Joining or ClientPhase.Teleporting
+        && now - log.PhaseSinceUtc > TimeSpan.FromSeconds(45);
 
     /// <summary>
     /// Sends one key press to each of <paramref name="clients"/>, then puts the user back where they
@@ -106,19 +117,32 @@ public static class AntiAfkService
             ushort vk = VkForKey(s.AntiAfkKey);
             IntPtr userWindow = Win32.GetForegroundWindow();   // where the user was
 
-            foreach (var t in clients)
+            // A different order every pass, so the clients aren't always visited in the same sequence.
+            var order = clients.OrderBy(_ => Random.Shared.Next()).ToList();
+            for (int i = 0; i < order.Count; i++)
             {
+                var t = order[i];
                 var st = _clients.GetOrAdd(t.Pid, _ => new ClientState());
                 var interval = AfkSchedule.NextInterval(s.AntiAfkIntervalMinutes, s.AntiAfkIntervalMaxMinutes, s.AntiAfkRandomize, Random.Shared);
 
                 IntPtr hWnd = ProcessRegistry.WindowHandle(ProcessRegistry.TokenFor(t));
-                if (hWnd == IntPtr.Zero) { st.NextDueUtc = DateTime.UtcNow + AfkSchedule.AfterFailure(++st.Failures, interval); continue; }
+                if (hWnd == IntPtr.Zero) { st.NextDueUtc = DateTime.UtcNow + AfkSchedule.AfterFailure(interval); continue; }
+                st.LastVisitUtc = DateTime.UtcNow;
 
-                // A client minimized on purpose (Ultra-Low AFK profile, "minimize all") goes back down afterwards.
+                // A client minimized on purpose ("minimize all", or by hand) goes back down afterwards.
                 bool wasMinimized = Win32.IsIconic(hWnd);
+                var timing = AfkSchedule.RandomTiming(wasMinimized, Random.Shared, s.AntiAfkFocusSeconds);
+                if (i > 0) Thread.Sleep(timing.GapMs);
 
                 Win32.ForceForeground(hWnd);
-                Thread.Sleep(250);                 // let the window actually take focus
+                if (Win32.GetForegroundWindow() != hWnd)
+                {
+                    // Windows only lets the process that sent the last input change the foreground
+                    // window. A no-op key (F13) makes that us, then the focus is asked for again.
+                    Win32.TapKey(VkF13, 30);
+                    Win32.ForceForeground(hWnd);
+                }
+                Thread.Sleep(timing.SettleMs);     // let the window take focus and catch up
 
                 // Windows refuses SetForegroundWindow in plenty of situations (a fullscreen game
                 // elsewhere, a UAC prompt, foreground lock). Sending the key anyway typed
@@ -127,17 +151,22 @@ public static class AntiAfkService
                 if (Win32.GetForegroundWindow() != hWnd)
                 {
                     DiagnosticsService.Warn("anti-afk", $"Skipped {t.Alias}: its window would not take focus");
-                    st.NextDueUtc = DateTime.UtcNow + AfkSchedule.AfterFailure(++st.Failures, interval);
+                    st.NextDueUtc = DateTime.UtcNow + AfkSchedule.AfterFailure(interval);
                     if (wasMinimized) Win32.ShowWindow(hWnd, SW_SHOWMINNOACTIVE);
                     continue;
                 }
 
-                Win32.TapKey(vk);
-                Thread.Sleep(150);
+                int presses = Math.Clamp(s.AntiAfkPresses, 1, 10);
+                for (int k = 0; k < presses; k++)
+                {
+                    if (k > 0) Thread.Sleep(AfkSchedule.PressGapMs(Random.Shared));
+                    if (Win32.GetForegroundWindow() != hWnd) break;   // the user clicked elsewhere meanwhile
+                    Win32.TapKey(vk, timing.HoldMs);
+                }
+                Thread.Sleep(timing.AfterMs);
                 if (wasMinimized) Win32.ShowWindow(hWnd, SW_SHOWMINNOACTIVE);
 
                 st.LastSentUtc = DateTime.UtcNow;
-                st.Failures = 0;
                 st.NextDueUtc = DateTime.UtcNow + interval;
                 sent++;
             }
@@ -152,6 +181,7 @@ public static class AntiAfkService
     }
 
     private const int SW_SHOWMINNOACTIVE = 7;
+    private const ushort VkF13 = 0x7C;
 
     /// <summary>Runs one anti-AFK pass over every client immediately, regardless of the enabled flag (the "Test now" button).</summary>
     public static void RunOnce() => System.Threading.Tasks.Task.Run(() => Pass(ProcessRegistry.All.ToList()));

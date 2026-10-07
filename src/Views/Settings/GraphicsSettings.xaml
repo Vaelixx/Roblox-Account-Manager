@@ -46,8 +46,22 @@
                         <TextBlock Text="FPS" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
                 </ctl:SettingItem>
-                <ctl:SettingItem Title="{DynamicResource Str.Profile.Minimize.Title}" Description="{DynamicResource Str.Profile.Minimize.Desc}">
-                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AfkProfileMinimize}" />
+            </ctl:DividerStack>
+        </Border>
+
+        <TextBlock Text="{DynamicResource Str.Windows.Section}" Style="{StaticResource Text.Section}" />
+        <Border Style="{StaticResource Panel}" Margin="0,0,0,24">
+            <ctl:DividerStack>
+                <ctl:SettingItem Title="{DynamicResource Str.Windows.Resize.Title}" Description="{DynamicResource Str.Windows.Resize.Desc}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding ResizeClientWindows}" />
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Windows.Size.Title}" Description="{DynamicResource Str.Windows.Size.Desc}" IsEnabled="{Binding ResizeClientWindows}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox Style="{StaticResource Input.Number}" Text="{Binding ClientWindowWidth, UpdateSourceTrigger=LostFocus}" ctl:Ui.Placeholder="{DynamicResource Str.Windows.Size.Auto}" />
+                        <TextBlock Text="×" Style="{StaticResource Text.Caption}" Margin="8,0" VerticalAlignment="Center" />
+                        <TextBox Style="{StaticResource Input.Number}" Text="{Binding ClientWindowHeight, UpdateSourceTrigger=LostFocus}" ctl:Ui.Placeholder="{DynamicResource Str.Windows.Size.Auto}" />
+                        <TextBlock Text="px" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
                 </ctl:SettingItem>
             </ctl:DividerStack>
         </Border>

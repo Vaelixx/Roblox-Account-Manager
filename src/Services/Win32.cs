@@ -18,12 +18,22 @@ internal static class Win32
     [DllImport("user32.dll")] internal static extern bool AttachThreadInput(uint attach, uint attachTo, bool fAttach);
     [DllImport("user32.dll")] internal static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] internal static extern int GetSystemMetrics(int nIndex);
+    [DllImport("user32.dll")] internal static extern bool SystemParametersInfo(uint action, uint param, out RECT rect, uint winIni);
+    [DllImport("user32.dll")] internal static extern bool IsZoomed(IntPtr hWnd);
+    [DllImport("user32.dll")] internal static extern int GetWindowLong(IntPtr hWnd, int index);
+
+    internal const int GWL_STYLE = -16;
+    internal const int WS_CAPTION = 0x00C00000;
+    internal const int SW_SHOWNOACTIVATE = 4;
 
     internal const int SW_RESTORE = 9;
     internal const int SW_SHOW = 5;
     internal const uint SWP_NOZORDER = 0x0004;
     internal const uint SWP_NOACTIVATE = 0x0010;
     internal const uint SWP_SHOWWINDOW = 0x0040;
+    internal const uint SWP_NOSIZE = 0x0001;
+    internal const uint SWP_NOMOVE = 0x0002;
+    internal const uint SPI_GETWORKAREA = 0x0030;   // primary monitor minus the taskbar
 
     internal const int SM_CXSCREEN = 0;   // primary monitor width (physical px)
     internal const int SM_CYSCREEN = 1;   // primary monitor height (physical px)
