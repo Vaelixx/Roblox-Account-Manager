@@ -12,6 +12,12 @@ public static class LauncherService
     // attribution tasks, read from the UI thread and the "close all" hotkey.
     private static readonly ConcurrentDictionary<long, ProcessRegistry.ProcessToken> _lastProcess = new();
 
+    // One launch at a time across the whole app (launch bar, presets, schedules, the watchdog, the local
+    // API, plugins), from writing the shared graphics settings until the new client has been found.
+    // Otherwise two clients starting together can be attributed to each other's accounts, and one
+    // launch's profile flags can replace another's before its client has read them.
+    private static readonly SemaphoreSlim _launchGate = new(1, 1);
+
     private static AccountStore? _store;
     public static void Init(AccountStore store) => _store = store;
 
@@ -99,16 +105,49 @@ public static class LauncherService
 
     /// <param name="profile">Performance profile for this client (<see cref="PerformanceProfiles"/>); null/empty = normal.</param>
     /// <param name="origin">Tag stored with the client (<see cref="ProcessRegistry.Tracked.Origin"/>); a relaunch passes it on.</param>
-    public static async Task<LaunchResult> LaunchAsync(Account acc, JoinTarget target, string? profile = null, string? origin = null)
+    public static Task<LaunchResult> LaunchAsync(Account acc, JoinTarget target, string? profile = null, string? origin = null)
+        => LaunchAsync(acc, target, profile, origin, CancellationToken.None);
+
+    /// <param name="ct">Gives up while the launch is still waiting for an earlier one to finish; a launch that has started runs to the end.</param>
+    public static async Task<LaunchResult> LaunchAsync(Account acc, JoinTarget target, string? profile, string? origin, CancellationToken ct)
     {
         if (LockService.IsLocked) return LaunchResult.Fail(L.T("Lock.Blocked"), retryable: false);
         if (string.IsNullOrEmpty(acc.Cookie)) return LaunchResult.Fail(L.T("Launch.NoCookie"), retryable: false);
         if (target.Kind != JoinKind.FollowUser && target.PlaceId <= 0) return LaunchResult.Fail(L.T("Launch.NeedPlace"), retryable: false);
 
-        var settings = SettingsService.Current;
-        EnsureMultiInstance(settings.EnableMultiInstance);
+        return await OneAtATimeAsync(() => StartClientAsync(acc, target, profile, origin), ct);
+    }
 
-        // Frame-rate cap, FastFlags, the profile and this account's own overrides, before the process starts.
+    /// <summary>
+    /// Runs a launch inside the launch gate. The gate stays taken until the client the launch started has
+    /// been found or given up on (at most ~34 s), and is freed straight away when no client was started.
+    /// </summary>
+    private static async Task<LaunchResult> OneAtATimeAsync(Func<Task<LaunchResult>> launch, CancellationToken ct = default)
+    {
+        await _launchGate.WaitAsync(ct);
+        var client = Task.FromResult<ProcessRegistry.ProcessToken?>(null);
+        try
+        {
+            // The manager may have been locked while this launch waited for the one before it.
+            if (LockService.IsLocked) return LaunchResult.Fail(L.T("Lock.Blocked"), retryable: false);
+            var result = await launch();
+            client = result.Client;
+            return result;
+        }
+        finally
+        {
+            if (client.IsCompleted) _launchGate.Release();
+            else _ = client.ContinueWith(_ => _launchGate.Release(), TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>
+    /// Frame-rate cap, FastFlags, the profile and this account's own overrides, written before the client
+    /// starts: it reads them once, at startup. A launch without a profile puts back what an earlier profile
+    /// launch changed.
+    /// </summary>
+    private static void ApplyGraphics(AppSettings settings, Account acc, string? profile)
+    {
         try
         {
             bool hadUndo = settings.ProfileUndo != null || settings.FpsCapBeforeProfile != null;
@@ -116,6 +155,13 @@ public static class LauncherService
             if (hadUndo || !string.IsNullOrEmpty(profile)) SettingsService.Save();
         }
         catch (Exception ex) { DiagnosticsService.Warn("launcher", "Could not apply graphics settings before launch", ex); }
+    }
+
+    private static async Task<LaunchResult> StartClientAsync(Account acc, JoinTarget target, string? profile, string? origin)
+    {
+        var settings = SettingsService.Current;
+        EnsureMultiInstance(settings.EnableMultiInstance);
+        ApplyGraphics(settings, acc, profile);
 
         string tracker = EnsureTrackerId(acc);
 
@@ -270,12 +316,13 @@ public static class LauncherService
     /// previous client has to have appeared (or the attribution window run out) AND the delay has to
     /// have passed — whichever takes longer. Waiting for the client keeps each launch's graphics
     /// settings from being overwritten before that client has read them, and stops two clients that
-    /// start together from being attributed to each other. A failed account never stops the batch
-    /// or touches the ones that already launched.
+    /// start together from being attributed to each other (the launch gate guarantees that for every
+    /// caller; waiting here as well lets the status line say so). A failed account never stops the
+    /// batch or touches the ones that already launched.
     /// </summary>
     /// <param name="onLaunching">Account about to launch and its index (UI status).</param>
     /// <param name="onWaiting">Seconds left before the next launch; -1 while only waiting for the client.</param>
-    /// <param name="ct">Stops the batch between accounts. Clients already launched keep running.</param>
+    /// <param name="ct">Stops the batch between accounts, also while it waits for a launch from elsewhere. Clients already launched keep running.</param>
     public static async Task<BatchResult> LaunchBatchAsync(IReadOnlyList<Account> accounts, JoinTarget target, BatchOptions options,
         Action<Account, int>? onLaunching = null, Action<int>? onWaiting = null, CancellationToken ct = default)
     {
@@ -285,16 +332,17 @@ public static class LauncherService
         for (int i = 0; i < accounts.Count && !ct.IsCancellationRequested; i++)
         {
             var acc = accounts[i];
-            attempted++;
             onLaunching?.Invoke(acc, i);
 
             LaunchResult r;
-            try { r = await LaunchAsync(acc, target, options.Profile, options.Origin); }
+            try { r = await LaunchAsync(acc, target, options.Profile, options.Origin, ct); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }   // stopped before this account started
             catch (Exception ex)
             {
                 DiagnosticsService.Warn("launcher", $"Launch of {acc.DisplayNameOrUser} threw", ex);
                 r = LaunchResult.Fail(L.T("Launch.Failed", ex.GetType().Name));
             }
+            attempted++;
             if (r.Success) launched++;
             else errors.Add($"{acc.DisplayNameOrUser}: {r.Message}");
 
@@ -344,7 +392,16 @@ public static class LauncherService
     public static async Task<LaunchResult> OpenRobloxAppAsync(Account acc)
     {
         if (LockService.IsLocked) return LaunchResult.Fail(L.T("Lock.Blocked"));
-        EnsureMultiInstance(SettingsService.Current.EnableMultiInstance);
+        return await OneAtATimeAsync(() => StartAppAsync(acc));
+    }
+
+    private static async Task<LaunchResult> StartAppAsync(Account acc)
+    {
+        var settings = SettingsService.Current;
+        EnsureMultiInstance(settings.EnableMultiInstance);
+        // No profile, like any plain launch: puts back the normal flags and frame-rate cap an earlier
+        // profile launch (Ultra-low) left behind, and writes this account's own overrides.
+        ApplyGraphics(settings, acc, null);
         string tracker = EnsureTrackerId(acc);
 
         var (ticket, rotated, error) = await RobloxApi.GetAuthTicketDetailedAsync(acc.Cookie);
