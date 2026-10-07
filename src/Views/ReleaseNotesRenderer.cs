@@ -28,7 +28,7 @@ internal static class ReleaseNotesRenderer
             return;
         }
 
-        foreach (string raw in markdown.Replace("\r\n", "\n").Split('\n'))
+        foreach (string raw in LogicalLines(markdown))
         {
             string line = raw.TrimEnd();
             line = ImagePattern.Replace(line, "");
@@ -43,7 +43,7 @@ internal static class ReleaseNotesRenderer
             // A horizontal rule separates versions in the full changelog; drawing it as a line
             // beats printing a literal "---".
             string bare = line.Trim();
-            if (bare.Length >= 3 && (bare.All(c => c == '-') || bare.All(c => c == '*') || bare.All(c => c == '_')))
+            if (IsRule(bare))
             {
                 target.Children.Add(new Border
                 {
@@ -94,6 +94,33 @@ internal static class ReleaseNotesRenderer
             target.Children.Add(block);
         }
     }
+
+    /// <summary>
+    /// The changelog is wrapped at a fixed width in the file. A paragraph or bullet continued on the
+    /// next line is joined back into one line here, so it wraps to the window instead of breaking
+    /// wherever the file did.
+    /// </summary>
+    private static List<string> LogicalLines(string markdown)
+    {
+        var lines = new List<string>();
+        foreach (string raw in markdown.Replace("\r\n", "\n").Split('\n'))
+        {
+            string bare = raw.Trim();
+            string previous = lines.Count > 0 ? lines[^1].Trim() : "";
+            bool continues = bare.Length > 0 && previous.Length > 0
+                             && !StartsBlock(bare) && !previous.StartsWith('#') && !IsRule(previous);
+            if (continues) lines[^1] = lines[^1].TrimEnd() + " " + bare;
+            else lines.Add(raw);
+        }
+        return lines;
+    }
+
+    private static bool StartsBlock(string bare)
+        => bare.StartsWith('#') || bare.StartsWith("- ") || bare.StartsWith("* ") || bare.StartsWith('>')
+           || bare.StartsWith('|') || bare.StartsWith("```") || IsRule(bare);
+
+    private static bool IsRule(string bare)
+        => bare.Length >= 3 && (bare.All(c => c == '-') || bare.All(c => c == '*') || bare.All(c => c == '_'));
 
     private static TextBlock Line(string text, bool muted) => new()
     {
