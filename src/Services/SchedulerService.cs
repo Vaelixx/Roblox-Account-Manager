@@ -104,16 +104,12 @@ public static class SchedulerService
             {
                 // An explicit "close" task means every client of those accounts, no exclusions —
                 // unlike the auto-close after a launch, which only reclaims what it started.
-                CloseMatching(task, new HashSet<int>());
+                CloseMatchingAccounts(task);
                 return;
             }
 
             // ---- Launch ----
-            // Clients that already existed are not this task's to close later. Snapshotting them
-            // here is what makes the auto-close surgical: without it a 20:00 "play for 30 min"
-            // task would, at 20:30, also kill the client the user started by hand at 19:00.
-            var preExisting = new HashSet<int>();
-            foreach (var t in ProcessRegistry.All) preExisting.Add(t.Pid);
+            var attributionTasks = new List<Task<ProcessRegistry.ProcessToken?>>();
 
             if (LockService.IsLocked)
             {
@@ -124,38 +120,67 @@ public static class SchedulerService
             if (!string.IsNullOrWhiteSpace(task.PresetName))
             {
                 var preset = PresetService.Find(task.PresetName);
-                if (preset != null) await PresetService.LaunchAsync(preset);
+                if (preset != null)
+                {
+                    var result = await PresetService.LaunchTrackedAsync(preset);
+                    attributionTasks.AddRange(result.AttributionTasks);
+                }
                 else DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': preset '{task.PresetName}' no longer exists");
             }
             else if (!string.IsNullOrWhiteSpace(task.Alias))
             {
                 var acc = _resolve?.Invoke(task.Alias);
                 if (acc != null && task.PlaceId > 0)
-                    await LauncherService.LaunchAsync(acc, task.PlaceId);
+                {
+                    var result = await LauncherService.LaunchAsync(acc, task.PlaceId);
+                    if (result.Success && result.AttributionTask != null)
+                        attributionTasks.Add(result.AttributionTask);
+                }
                 else DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': account or place is missing");
             }
             ToastService.Info(L.T("Toast.TaskRan.Title"), task.Name);
 
             // ---- Optional auto-close ----
-            if (task.AutoCloseAfterMinutes > 0)
+            if (task.AutoCloseAfterMinutes > 0 && attributionTasks.Count > 0)
             {
-                _ = AutoCloseLaterAsync(task, TimeSpan.FromMinutes(task.AutoCloseAfterMinutes), preExisting);
+                _ = AutoCloseLaterAsync(task, TimeSpan.FromMinutes(task.AutoCloseAfterMinutes), attributionTasks);
             }
         }
         catch { /* a single bad task must not take down the scheduler */ }
     }
 
-    private static async Task AutoCloseLaterAsync(ScheduledTask task, TimeSpan after, HashSet<int> preExisting)
+    private static async Task AutoCloseLaterAsync(ScheduledTask task, TimeSpan after, IReadOnlyList<Task<ProcessRegistry.ProcessToken?>> attributionTasks)
     {
         await Task.Delay(after);
-        CloseMatching(task, preExisting);
+
+        var tokens = new HashSet<ProcessRegistry.ProcessToken>();
+        foreach (var attribution in attributionTasks)
+        {
+            try
+            {
+                if (await attribution is { } token) tokens.Add(token);
+            }
+            catch { }
+        }
+
+        int closed = 0;
+        foreach (var token in tokens)
+        {
+            try
+            {
+                if (InstanceControlService.Close(token)) closed++;
+            }
+            catch (Exception ex) { DiagnosticsService.Warn("scheduler", $"Auto-close failed for pid {token.Pid}", ex); }
+        }
+
+        if (closed > 0)
+            DiagnosticsService.Log("scheduler", $"Auto-closed {closed} client(s) for task '{task.Name}'");
     }
 
     /// <summary>
-    /// Kills the clients this task started: right account, and not one that was already running
-    /// when the task fired. <paramref name="preExisting"/> is the pid snapshot from launch time.
+    /// Closes every live client belonging to the accounts targeted by an explicit close task.
     /// </summary>
-    private static void CloseMatching(ScheduledTask task, HashSet<int> preExisting)
+    private static void CloseMatchingAccounts(ScheduledTask task)
     {
         var targetUserIds = ResolveTargetUserIds(task);
         if (targetUserIds.Count == 0) return;
@@ -164,7 +189,6 @@ public static class SchedulerService
         foreach (var t in ProcessRegistry.All)
         {
             if (!targetUserIds.Contains(t.UserId)) continue;
-            if (preExisting.Contains(t.Pid)) continue;   // was already running — not ours to close
             try
             {
                 if (InstanceControlService.Close(t.Pid)) closed++;
