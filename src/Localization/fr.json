@@ -278,6 +278,8 @@
   "Startup.Recover.Title": "Restaurer vos comptes ?",
   "Startup.Recover.Body": "Le fichier des comptes est vide, mais la sauvegarde à côté est protégée par un mot de passe principal. Cela peut arriver si la version 2.0 a été mise à jour pendant que sa fenêtre de déverrouillage était ouverte. Saisissez votre mot de passe principal pour récupérer vos comptes, ou annulez pour mettre la sauvegarde de côté sans la modifier.",
   "Startup.Recover.Action": "Restaurer",
+  "Startup.Recover.Unreadable": "La sauvegarde ne peut pas être lue pour le moment ; un autre programme l'utilise peut-être. Réessayez dans un instant.",
+  "Startup.Recover.Kept": "Votre sauvegarde a été conservée telle quelle sous :\n{0}\n\nPour la restaurer plus tard, fermez le gestionnaire et renommez ce fichier en accounts.dat.",
   "Startup.Unreadable.Title": "Le fichier des comptes est illisible",
   "Startup.Unreadable.Body": "Vos comptes enregistrés n'ont pas pu être déchiffrés. Cela signifie généralement que le fichier a été copié depuis un autre utilisateur Windows ou un autre PC, car le chiffrement est lié au compte Windows qui l'a écrit.\n\nRien n'a été modifié ni supprimé. Le fichier se trouve dans :\n{0}\n\nL'app va se fermer pour que le fichier reste intact.",
   "Overview.Title": "Vue d'ensemble",

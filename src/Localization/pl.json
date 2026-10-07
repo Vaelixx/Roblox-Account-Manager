@@ -293,6 +293,8 @@
   "Startup.Recover.Title": "Przywrócić konta?",
   "Startup.Recover.Body": "Plik kont jest pusty, ale kopia zapasowa obok niego jest chroniona hasłem głównym. Może się tak zdarzyć, jeśli wersja 2.0 została zaktualizowana, gdy jej okno odblokowania było otwarte. Wpisz hasło główne, aby odzyskać konta, albo anuluj, aby odłożyć kopię zapasową bez zmian.",
   "Startup.Recover.Action": "Przywróć",
+  "Startup.Recover.Unreadable": "Nie można teraz odczytać kopii zapasowej; być może używa jej inny program. Spróbuj ponownie za chwilę.",
+  "Startup.Recover.Kept": "Twoja kopia zapasowa została zachowana bez zmian jako:\n{0}\n\nAby przywrócić ją później, zamknij menedżera i zmień nazwę tego pliku na accounts.dat.",
   "Startup.Unreadable.Title": "Nie można odczytać pliku kont",
   "Startup.Unreadable.Body": "Nie udało się odszyfrować zapisanych kont. Zwykle oznacza to, że plik skopiowano od innego użytkownika Windows lub z innego komputera, bo szyfrowanie jest powiązane z kontem Windows, które go zapisało.\n\nNiczego nie zmieniono ani nie usunięto. Plik znajduje się w:\n{0}\n\nAplikacja zostanie teraz zamknięta, aby plik pozostał nienaruszony.",
   "Overview.Title": "Przegląd",

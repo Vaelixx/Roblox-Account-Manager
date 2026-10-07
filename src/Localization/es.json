@@ -278,6 +278,8 @@
   "Startup.Recover.Title": "¿Restaurar tus cuentas?",
   "Startup.Recover.Body": "El archivo de cuentas está vacío, pero la copia de seguridad que hay junto a él está protegida con una contraseña maestra. Puede pasar si la versión 2.0 se actualizó mientras su ventana de desbloqueo estaba abierta. Introduce tu contraseña maestra para recuperar tus cuentas, o cancela para guardar la copia aparte sin cambios.",
   "Startup.Recover.Action": "Restaurar",
+  "Startup.Recover.Unreadable": "Ahora no se puede leer la copia de seguridad; puede que otro programa la esté usando. Inténtalo de nuevo en un momento.",
+  "Startup.Recover.Kept": "Tu copia de seguridad se guardó sin cambios como:\n{0}\n\nPara restaurarla más tarde, cierra el gestor y cambia el nombre de ese archivo a accounts.dat.",
   "Startup.Unreadable.Title": "No se puede leer el archivo de cuentas",
   "Startup.Unreadable.Body": "No se pudieron descifrar tus cuentas guardadas. Normalmente significa que el archivo se copió desde otro usuario de Windows u otro PC, porque el cifrado está ligado a la cuenta de Windows que lo escribió.\n\nNo se cambió ni se eliminó nada. El archivo está en:\n{0}\n\nLa app se cerrará ahora para que el archivo quede intacto.",
   "Overview.Title": "Resumen",

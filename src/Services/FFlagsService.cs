@@ -133,15 +133,29 @@ public static class FFlagsService
             else return;
 
             // A running Ultra-low client writes its cap back into the file when it closes, so the record
-            // stays until none is left and the next plain launch restores the cap once more.
-            bool profileStillRunning = ProcessRegistry.All.Any(t => t.Profile == PerformanceProfiles.UltraLowAfk);
-            if (restored && !profileStillRunning)
+            // stays until none can be left and the next plain launch restores the cap once more.
+            if (restored && !ProfileClientMayBeRunning())
             {
                 s.FpsCapBeforeProfile = null;
                 s.FpsCapWrittenByProfile = null;
             }
         }
         catch (Exception ex) { DiagnosticsService.Warn("fflags", "Could not apply the frame-rate cap", ex); }
+    }
+
+    /// <summary>
+    /// Whether a Roblox client is running that may have the Ultra-low profile: one launched with it, or one
+    /// the manager can't vouch for (started outside it, or before the manager was restarted).
+    /// </summary>
+    private static bool ProfileClientMayBeRunning()
+    {
+        var plain = ProcessRegistry.All
+            .Where(t => !t.IsExternal && t.Profile != PerformanceProfiles.UltraLowAfk)
+            .Select(t => t.Pid)
+            .ToHashSet();
+        var running = System.Diagnostics.Process.GetProcessesByName("RobloxPlayerBeta");
+        try { return running.Any(p => !plain.Contains(p.Id)); }
+        finally { foreach (var p in running) p.Dispose(); }
     }
 
     /// <summary>

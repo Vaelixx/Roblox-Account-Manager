@@ -277,6 +277,8 @@
   "Startup.Recover.Title": "Restore your accounts?",
   "Startup.Recover.Body": "The account file is empty, but the backup next to it is protected with a master password. Updating from version 2.0 while its unlock window was open can cause this. Enter your master password to bring your accounts back, or cancel to keep the backup aside unchanged.",
   "Startup.Recover.Action": "Restore",
+  "Startup.Recover.Unreadable": "The backup can't be read right now; another program may be using it. Try again in a moment.",
+  "Startup.Recover.Kept": "Your backup was kept unchanged as:\n{0}\n\nTo restore it later, close the manager and rename that file to accounts.dat.",
   "Startup.Unreadable.Title": "The account file can't be read",
   "Startup.Unreadable.Body": "Your saved accounts couldn't be decrypted. This usually means the file was copied from another Windows user or PC, because its encryption is tied to the Windows account that wrote it.\n\nNothing was changed or deleted. The file is in:\n{0}\n\nThe app closes now so the file stays intact.",
   "Overview.Title": "Overview",

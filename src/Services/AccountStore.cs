@@ -92,6 +92,9 @@ public class AccountStore
     //  Recovery from the 2.0 update accident
     // ---------------------------------------------------------------
 
+    // Size of a password-protected store holding no accounts: mode, salt, nonce, tag and "[]".
+    private const int EmptyProtectedStoreBytes = 1 + 16 + 12 + 16 + 2;
+
     /// <summary>
     /// The trace "Update now" over 2.0's unlock prompt left behind: it saved the never-opened, empty
     /// store, so accounts.dat became an empty file without a master password while the real,
@@ -102,22 +105,43 @@ public class AccountStore
         get
         {
             if (!_opened || MasterPassword != null || Accounts.Count > 0) return false;
-            try { return File.Exists(BackupPath) && Crypto.IsPasswordProtected(File.ReadAllBytes(BackupPath)); }
-            catch { return false; }
+            // A scanner or sync client may hold the backup for a moment right at startup.
+            for (int attempt = 1; ; attempt++)
+            {
+                try { return IsProtectedBackupWithAccounts(); }
+                catch (IOException) when (attempt < 4) { Thread.Sleep(300); }
+                catch { return false; }
+            }
         }
     }
 
-    /// <summary>
-    /// Makes the password-protected accounts.bak the account file again and opens it. False when the
-    /// password does not open the backup. The empty file is kept aside, never deleted.
-    /// </summary>
-    public bool TryRestoreBackup(string password)
+    private static bool IsProtectedBackupWithAccounts()
     {
-        try
+        var info = new FileInfo(BackupPath);
+        if (!info.Exists || info.Length <= EmptyProtectedStoreBytes) return false;
+        using var fs = new FileStream(BackupPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        int mode = fs.ReadByte();
+        return mode >= 0 && Crypto.IsPasswordProtected(new[] { (byte)mode });
+    }
+
+    public enum RestoreOutcome { Restored, WrongPassword, Unreadable }
+
+    /// <summary>
+    /// Makes the password-protected accounts.bak the account file again and opens it. The empty file is
+    /// kept aside, never deleted.
+    /// </summary>
+    public RestoreOutcome TryRestoreBackup(string password)
+    {
+        byte[] backup;
+        try { backup = File.ReadAllBytes(BackupPath); }
+        catch (Exception ex)
         {
-            Crypto.Decrypt(File.ReadAllBytes(BackupPath), password);   // throws on a wrong password
+            DiagnosticsService.Warn("store", "The account backup could not be read", ex);
+            return RestoreOutcome.Unreadable;
         }
-        catch { return false; }
+
+        try { Crypto.Decrypt(backup, password); }   // throws on a wrong password
+        catch { return RestoreOutcome.WrongPassword; }
 
         try
         {
@@ -125,30 +149,61 @@ public class AccountStore
             {
                 if (File.Exists(StorePath))
                     File.Move(StorePath, Paths.InData($"accounts.empty-{DateTime.Now:yyyyMMdd-HHmmss}.dat"));
-                File.Copy(BackupPath, StorePath);
+                File.WriteAllBytes(StorePath, backup);
             }
         }
         catch (Exception ex)
         {
             DiagnosticsService.Error("store", "The account backup could not be restored", ex);
-            return false;
+            return RestoreOutcome.Unreadable;
         }
-        return Load(password);
+        return Load(password) ? RestoreOutcome.Restored : RestoreOutcome.Unreadable;
     }
 
-    /// <summary>Moves accounts.bak out of the way, unchanged, so no later save can overwrite it. Returns its new path.</summary>
-    public string? KeepBackupAside()
+    /// <summary>
+    /// Moves accounts.bak out of the way, unchanged, so no later save can overwrite it (a copy when it
+    /// can't be moved). Returns where the backup is now.
+    /// </summary>
+    public string KeepBackupAside()
     {
+        string kept = Paths.InData($"accounts.bak-{DateTime.Now:yyyyMMdd-HHmmss}.kept");
         try
         {
-            string kept = Paths.InData($"accounts.bak-{DateTime.Now:yyyyMMdd-HHmmss}.kept");
             lock (_saveLock) File.Move(BackupPath, kept);
             return kept;
         }
+        catch (Exception ex) { DiagnosticsService.Warn("store", "The account backup could not be moved aside", ex); }
+
+        // Saves never overwrite a password-protected backup they could not copy aside first, so the
+        // original stays safe even when this copy fails too.
+        try
+        {
+            lock (_saveLock) File.Copy(BackupPath, kept, overwrite: false);
+            return kept;
+        }
+        catch { return BackupPath; }
+    }
+
+    /// <summary>
+    /// Called before a store without a master password replaces accounts.bak. A password-protected
+    /// backup with accounts in it may be the only copy of them (the 2.0 update accident) and is copied
+    /// aside first. False when that is needed but not possible right now: the backup is then left alone.
+    /// </summary>
+    private static bool PreserveProtectedBackup()
+    {
+        try
+        {
+            if (!IsProtectedBackupWithAccounts()) return true;
+            string kept = Paths.InData($"accounts.bak-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6]}.kept");
+            File.Copy(BackupPath, kept, overwrite: false);
+            if (new FileInfo(kept).Length != new FileInfo(BackupPath).Length) return false;
+            DiagnosticsService.Warn("store", $"Kept a password-protected account backup as {kept} before replacing it");
+            return true;
+        }
         catch (Exception ex)
         {
-            DiagnosticsService.Warn("store", "The account backup could not be moved aside", ex);
-            return null;
+            DiagnosticsService.Warn("store", "A password-protected account backup could not be kept aside; it is left as it is", ex);
+            return false;
         }
     }
 
@@ -179,7 +234,9 @@ public class AccountStore
                 if (saveId < _lastWrittenSaveId) return;
 
                 Directory.CreateDirectory(Paths.DataDir);
-                if (File.Exists(StorePath))
+                // The backup is about to become the current file. Under a store without a master password
+                // a password-protected backup is copied aside first, or left alone this time if it can't be.
+                if (File.Exists(StorePath) && (MasterPassword is { Length: > 0 } || PreserveProtectedBackup()))
                     File.Copy(StorePath, BackupPath, overwrite: true);
 
                 // Atomic write: stage, then swap, so a crash mid-write can never truncate accounts.dat.

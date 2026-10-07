@@ -383,14 +383,23 @@ public partial class App : Application
     private static void OfferBackupRestore(AccountStore store)
     {
         string? pw = DialogService.PromptPassword(L.T("Startup.Recover.Title"), L.T("Startup.Recover.Body"), L.T("Startup.Recover.Action"),
-            candidate => Task.FromResult(store.TryRestoreBackup(candidate) ? null : L.T("Lock.Wrong")));
+            candidate => Task.FromResult(store.TryRestoreBackup(candidate) switch
+            {
+                AccountStore.RestoreOutcome.Restored => (string?)null,
+                AccountStore.RestoreOutcome.WrongPassword => L.T("Lock.Wrong"),
+                _ => L.T("Startup.Recover.Unreadable"),
+            }));
         if (pw != null)
         {
             DiagnosticsService.Warn("store", $"Restored {store.Accounts.Count} account(s) from the password-protected backup");
             return;
         }
-        string? kept = store.KeepBackupAside();
-        DiagnosticsService.Warn("store", $"Password-protected account backup not restored; kept as {kept ?? "accounts.bak (could not be moved)"}");
+
+        // Not now (the password may come back to them later): keep the backup where no save reaches it,
+        // and say where, since the manager won't offer this again.
+        string kept = store.KeepBackupAside();
+        DiagnosticsService.Warn("store", $"Password-protected account backup not restored; kept as {kept}");
+        DialogService.Info(L.T("Startup.Recover.Title"), L.T("Startup.Recover.Kept", kept));
     }
 
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

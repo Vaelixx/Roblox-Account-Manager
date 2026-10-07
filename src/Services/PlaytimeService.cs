@@ -97,6 +97,9 @@ public static class PlaytimeService
     /// </summary>
     public static void FlushOpenSessions()
     {
+        // Before the history was read (startup failed early) there is nothing to add to, and saving
+        // would replace the file with an empty list.
+        if (!_started) return;
         try
         {
             foreach (var t in ProcessRegistry.All) Record(t, save: false);
