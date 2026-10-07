@@ -51,7 +51,7 @@ public static class TotpService
         foreach (char c in input)
         {
             int idx = alphabet.IndexOf(c);
-            if (idx < 0) continue; // skip stray characters instead of throwing
+            if (idx < 0) throw new FormatException("Invalid Base32 character.");
             bits.Append(Convert.ToString(idx, 2).PadLeft(5, '0'));
         }
 
