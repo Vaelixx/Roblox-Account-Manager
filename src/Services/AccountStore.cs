@@ -16,6 +16,8 @@ public class AccountStore
     // Serialises disk writes: Save() runs on the UI thread and from background callbacks (a cookie
     // rotated during a launch, the local API) — two interleaved saves could corrupt the store.
     private static readonly object _saveLock = new();
+    private static long _nextSaveId;
+    private static long _lastWrittenSaveId;
 
     public ObservableCollection<Account> Accounts { get; } = new();
 
@@ -79,11 +81,14 @@ public class AccountStore
     public void Save()
     {
         if (IsReadOnly) return;
+
+        long saveId = Interlocked.Increment(ref _nextSaveId);
+
         try
         {
             // Each cookie is DPAPI-wrapped on its own, so it is never plain text — not even inside the
-            // (already encrypted) store JSON. Serialise before taking the lock; the crypto is the slow part.
-            var dtos = Accounts.ToArray().Select(Persisted.FromAccount).ToList();
+            // (already encrypted) store JSON. Keep the slow crypto outside the disk lock.
+            var dtos = SnapshotForSave();
             string json = JsonSerializer.Serialize(dtos, JsonOpts);
             byte[] plain = Encoding.UTF8.GetBytes(json);
             byte[] encrypted = MasterPassword is { Length: > 0 }
@@ -92,6 +97,8 @@ public class AccountStore
 
             lock (_saveLock)
             {
+                if (saveId < _lastWrittenSaveId) return;
+
                 Directory.CreateDirectory(Paths.DataDir);
                 if (File.Exists(StorePath))
                     File.Copy(StorePath, BackupPath, overwrite: true);
@@ -103,6 +110,8 @@ public class AccountStore
                     File.Replace(tmp, StorePath, null);
                 else
                     File.Move(tmp, StorePath);
+
+                _lastWrittenSaveId = saveId;
             }
             try { Saved?.Invoke(); } catch { }
         }
@@ -110,6 +119,15 @@ public class AccountStore
         {
             DiagnosticsService.Error("store", "Accounts could not be saved", ex);
         }
+    }
+
+    private List<Persisted> SnapshotForSave()
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess() && !dispatcher.HasShutdownStarted)
+            return dispatcher.Invoke(() => Accounts.ToArray().Select(Persisted.FromAccount).ToList());
+
+        return Accounts.ToArray().Select(Persisted.FromAccount).ToList();
     }
 
     /// <summary>On-disk shape. Cookie and 2FA secret are stored DPAPI-protected (enc1:…), never raw.</summary>
