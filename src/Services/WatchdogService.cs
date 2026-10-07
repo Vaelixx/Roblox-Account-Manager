@@ -104,7 +104,9 @@ public static class WatchdogService
     /// long to wait before it, plus a token that <see cref="CancelRejoin"/> trips. Null when a rejoin
     /// for this account is already waiting.
     /// </summary>
-    private static (int Streak, TimeSpan Delay, CancellationTokenSource Cts)? BookRejoin(long userId, TimeSpan previousUptime, string? origin)
+    /// <param name="countAsRejoin">False for a timed restart: the overview's rejoin count is about recoveries.</param>
+    private static (int Streak, TimeSpan Delay, CancellationTokenSource Cts)? BookRejoin(long userId, TimeSpan previousUptime, string? origin,
+        bool countAsRejoin = true)
     {
         if (IsEnded(origin)) return null;   // the schedule that started the client is over
         lock (_rejoinGate)
@@ -113,7 +115,7 @@ public static class WatchdogService
             int streak = RejoinBackoff.StreakAfterExit(_streak.GetValueOrDefault(userId), previousUptime);
             var delay = RejoinBackoff.DelayFor(streak);
             _streak[userId] = streak + 1;
-            _sessionRejoins[userId] = _sessionRejoins.GetValueOrDefault(userId) + 1;
+            if (countAsRejoin) _sessionRejoins[userId] = _sessionRejoins.GetValueOrDefault(userId) + 1;
             var cts = new CancellationTokenSource();
             _pending[userId] = (DateTime.UtcNow + delay, cts, origin);
             return (streak + 1, delay, cts);
@@ -233,7 +235,9 @@ public static class WatchdogService
             WebhookService.ReconnectFailed(alias, acc.ThumbnailUrl, placeId, $"{streak - 1} rejoins in a row, next try in {mins} min");
     }
 
-    private static async Task RejoinAsync(Account acc, ProcessRegistry.Tracked t, JoinTarget target, TimeSpan delay, CancellationTokenSource cts)
+    /// <param name="timedRestart">A planned restart, not a recovery: no "reconnected" post for it.</param>
+    private static async Task RejoinAsync(Account acc, ProcessRegistry.Tracked t, JoinTarget target, TimeSpan delay, CancellationTokenSource cts,
+        bool timedRestart = false)
     {
         try
         {
@@ -250,12 +254,20 @@ public static class WatchdogService
                 if (LockService.IsLocked || cts.IsCancellationRequested) return;
                 // Relaunched by hand (or by a schedule) while we waited to retry: nothing left to recover.
                 if (attempt > 0 && HasLiveClient(acc.UserId)) return;
-                result = await LauncherService.LaunchAsync(acc, target, t.Profile, t.Origin);
+                // The launch may wait its turn behind others; by then the user may have relaunched the
+                // account themselves, or stopped this rejoin.
+                try
+                {
+                    result = await LauncherService.LaunchAsync(acc, target, t.Profile, t.Origin, cts.Token,
+                        stillWanted: () => !cts.IsCancellationRequested && !IsEnded(t.Origin) && !HasLiveClient(acc.UserId));
+                }
+                catch (OperationCanceledException) when (cts.IsCancellationRequested) { return; }
+                if (result.Skipped) return;
                 if (result.Success && (cts.IsCancellationRequested || IsEnded(t.Origin)))
                 {
                     // Stopped (Stop, close all, the schedule's end) while that launch was under way: the
                     // client it started must not stay.
-                    if (await result.Client is { } started) InstanceControlService.Close(started);
+                    if (await result.Client is { } started) await Task.Run(() => InstanceControlService.Close(started));
                     return;
                 }
                 if (result.Success || !result.Retryable || attempt >= RetryDelays.Length) break;
@@ -267,7 +279,7 @@ public static class WatchdogService
             bool ok = result.Success;
             if (WebhookService.Configured)
             {
-                if (ok) WebhookService.Reconnected(acc, target.PlaceId, target.JobId);
+                if (ok) { if (!timedRestart) WebhookService.Reconnected(acc, target.PlaceId, target.JobId); }
                 else WebhookService.ReconnectFailed(t.Alias, acc.ThumbnailUrl, target.PlaceId, result.Message);
             }
             if (!ok && SettingsService.Current.ToastOnCrash)
@@ -438,14 +450,14 @@ public static class WatchdogService
             // Booked like a crash rejoin: a failed relaunch is retried, the wait shows on the overview with
             // Stop, and nothing happens while a rejoin for the account is already on its way. The client
             // ran long enough to start a fresh streak, so the relaunch follows within seconds.
-            var booking = BookRejoin(acc.UserId, t.Uptime, t.Origin);
+            var booking = BookRejoin(acc.UserId, t.Uptime, t.Origin, countAsRejoin: false);
             if (booking is not { } b) return;
             DiagnosticsService.Log("watchdog", $"Timed restart of {t.Alias} after {(int)t.Uptime.TotalMinutes} min into {target}");
 
             var token = ProcessRegistry.TokenFor(t);
             ProcessRegistry.MarkClosing(token);   // deliberate: no crash handling
             await Task.Run(() => InstanceControlService.Close(token));
-            await RejoinAsync(acc, t, target, b.Delay, b.Cts);
+            await RejoinAsync(acc, t, target, b.Delay, b.Cts, timedRestart: true);
         }
         catch (Exception ex) { DiagnosticsService.Warn("watchdog", $"Timed restart of {t.Alias} failed", ex); }
         finally { Interlocked.Exchange(ref _restarting, 0); }

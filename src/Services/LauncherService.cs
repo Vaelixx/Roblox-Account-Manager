@@ -61,6 +61,9 @@ public static class LauncherService
         /// </summary>
         public bool Retryable { get; init; } = true;
 
+        /// <summary>Nothing was started because the launch was no longer wanted once its turn came (see <c>stillWanted</c>).</summary>
+        public bool Skipped { get; init; }
+
         /// <summary>
         /// Completes with the client this launch produced once it has been found (PID plus start time,
         /// so a recycled PID can never be mistaken for it), or null when none appeared in time. The
@@ -109,20 +112,26 @@ public static class LauncherService
         => LaunchAsync(acc, target, profile, origin, CancellationToken.None);
 
     /// <param name="ct">Gives up while the launch is still waiting for an earlier one to finish; a launch that has started runs to the end.</param>
-    public static async Task<LaunchResult> LaunchAsync(Account acc, JoinTarget target, string? profile, string? origin, CancellationToken ct)
+    /// <param name="stillWanted">
+    /// Asked once the launch's turn has come. False ends it without starting anything (<see cref="LaunchResult.Skipped"/>):
+    /// a rejoin queued behind the user's own relaunch of that account is no longer needed then.
+    /// </param>
+    public static async Task<LaunchResult> LaunchAsync(Account acc, JoinTarget target, string? profile, string? origin, CancellationToken ct,
+        Func<bool>? stillWanted = null)
     {
         if (LockService.IsLocked) return LaunchResult.Fail(L.T("Lock.Blocked"), retryable: false);
         if (string.IsNullOrEmpty(acc.Cookie)) return LaunchResult.Fail(L.T("Launch.NoCookie"), retryable: false);
         if (target.Kind != JoinKind.FollowUser && target.PlaceId <= 0) return LaunchResult.Fail(L.T("Launch.NeedPlace"), retryable: false);
 
-        return await OneAtATimeAsync(() => StartClientAsync(acc, target, profile, origin), ct);
+        return await OneAtATimeAsync(() => StartClientAsync(acc, target, profile, origin), ct, stillWanted);
     }
 
     /// <summary>
     /// Runs a launch inside the launch gate. The gate stays taken until the client the launch started has
     /// been found or given up on (at most ~34 s), and is freed straight away when no client was started.
     /// </summary>
-    private static async Task<LaunchResult> OneAtATimeAsync(Func<Task<LaunchResult>> launch, CancellationToken ct = default)
+    private static async Task<LaunchResult> OneAtATimeAsync(Func<Task<LaunchResult>> launch, CancellationToken ct = default,
+        Func<bool>? stillWanted = null)
     {
         await _launchGate.WaitAsync(ct);
         var client = Task.FromResult<ProcessRegistry.ProcessToken?>(null);
@@ -130,6 +139,8 @@ public static class LauncherService
         {
             // The manager may have been locked while this launch waited for the one before it.
             if (LockService.IsLocked) return LaunchResult.Fail(L.T("Lock.Blocked"), retryable: false);
+            // Every launch before this one has registered its client by now, so this answer is reliable.
+            if (stillWanted != null && !stillWanted()) return new LaunchResult { Retryable = false, Skipped = true };
             var result = await launch();
             client = result.Client;
             return result;
@@ -227,7 +238,10 @@ public static class LauncherService
             string? gameBefore = acc.Presence == PresenceStatus.InGame ? acc.GameId ?? "" : null;
             var client = Task.Run(() => AttributeClientAsync(acc, target, profile, launchedAt, gameBefore, origin));
 
-            try { PluginService.RaiseLaunched(acc, target.PlaceId, jobId); } catch { }
+            // Off the launch's own path: a plugin that starts a launch from this event would otherwise wait
+            // for the gate this launch holds, and every launch in the app would hang.
+            long placeForPlugins = target.PlaceId;
+            _ = Task.Run(() => { try { PluginService.RaiseLaunched(acc, placeForPlugins, jobId); } catch { } });
             if (settings.ToastOnLaunch)
                 ToastService.Success(L.T("Toast.Launched.Title"), L.T("Toast.Launched.Body", acc.DisplayNameOrUser));
             if (settings.NotifyOnConnect && WebhookService.Configured)
@@ -463,6 +477,9 @@ public static class LauncherService
     public static int CloseAllClients()
     {
         // Nothing should come back on its own afterwards: a crashed client waiting to be rejoined included.
+        // Every tracked client is flagged first, so a timed restart or disconnect check during the loop
+        // leaves them alone, and rejoins are cancelled again after it for anything booked meanwhile.
+        foreach (var t in ProcessRegistry.All) ProcessRegistry.MarkClosing(ProcessRegistry.TokenFor(t));
         WatchdogService.CancelAllRejoins();
 
         int closed = 0;
@@ -485,6 +502,7 @@ public static class LauncherService
             finally { p.Dispose(); }
         }
         _lastProcess.Clear();
+        WatchdogService.CancelAllRejoins();
         try { ProcessRegistry.Prune(); } catch { }
         return closed;
     }

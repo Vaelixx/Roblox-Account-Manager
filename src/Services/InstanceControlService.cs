@@ -202,13 +202,15 @@ public static class InstanceControlService
         int closed = 0;
         try
         {
-            // A crashed client waiting to be rejoined would come back after the close.
-            WatchdogService.CancelRejoin(userId);
-
-            // Materialise first: Close() mutates the registry as we go.
+            // Materialise first: Close() mutates the registry as we go. Flagged before anything closes, so
+            // a timed restart or disconnect check meanwhile leaves them alone, and a crashed client waiting
+            // to be rejoined (or booked during the loop) must not come back after the close.
             var tokens = ProcessRegistry.ForUser(userId).Select(ProcessRegistry.TokenFor).ToList();
+            foreach (var token in tokens) ProcessRegistry.MarkClosing(token);
+            WatchdogService.CancelRejoin(userId);
             foreach (var token in tokens)
                 if (Close(token)) closed++;
+            WatchdogService.CancelRejoin(userId);
         }
         catch { }
 

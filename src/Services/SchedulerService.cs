@@ -207,19 +207,23 @@ public static class SchedulerService
         var targetUserIds = ResolveTargetUserIds(task);
         if (targetUserIds.Count == 0) return;
 
-        // A crashed client of these accounts waiting to be rejoined would come back after the close.
+        // Flagged before anything closes, so a timed restart or disconnect check meanwhile leaves them alone;
+        // a crashed client of these accounts waiting to be rejoined (or booked during the loop) must not
+        // come back after the close.
+        var clients = ProcessRegistry.All.Where(t => targetUserIds.Contains(t.UserId)).ToList();
+        foreach (var t in clients) ProcessRegistry.MarkClosing(ProcessRegistry.TokenFor(t));
         foreach (long id in targetUserIds) WatchdogService.CancelRejoin(id);
 
         int closed = 0;
-        foreach (var t in ProcessRegistry.All)
+        foreach (var t in clients)
         {
-            if (!targetUserIds.Contains(t.UserId)) continue;
             try
             {
                 if (InstanceControlService.Close(ProcessRegistry.TokenFor(t))) closed++;
             }
             catch (Exception ex) { DiagnosticsService.Warn("scheduler", $"Auto-close failed for pid {t.Pid}", ex); }
         }
+        foreach (long id in targetUserIds) WatchdogService.CancelRejoin(id);
 
         if (closed > 0)
             DiagnosticsService.Log("scheduler", $"Auto-closed {closed} client(s) for task '{task.Name}'");
