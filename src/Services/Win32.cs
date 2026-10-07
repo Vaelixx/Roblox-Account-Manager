@@ -18,12 +18,22 @@ internal static class Win32
     [DllImport("user32.dll")] internal static extern bool AttachThreadInput(uint attach, uint attachTo, bool fAttach);
     [DllImport("user32.dll")] internal static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] internal static extern int GetSystemMetrics(int nIndex);
+    [DllImport("user32.dll")] internal static extern bool SystemParametersInfo(uint action, uint param, out RECT rect, uint winIni);
+    [DllImport("user32.dll")] internal static extern bool IsZoomed(IntPtr hWnd);
+    [DllImport("user32.dll")] internal static extern int GetWindowLong(IntPtr hWnd, int index);
+
+    internal const int GWL_STYLE = -16;
+    internal const int WS_CAPTION = 0x00C00000;
+    internal const int SW_SHOWNOACTIVATE = 4;
 
     internal const int SW_RESTORE = 9;
     internal const int SW_SHOW = 5;
     internal const uint SWP_NOZORDER = 0x0004;
     internal const uint SWP_NOACTIVATE = 0x0010;
     internal const uint SWP_SHOWWINDOW = 0x0040;
+    internal const uint SWP_NOSIZE = 0x0001;
+    internal const uint SWP_NOMOVE = 0x0002;
+    internal const uint SPI_GETWORKAREA = 0x0030;   // primary monitor minus the taskbar
 
     internal const int SM_CXSCREEN = 0;   // primary monitor width (physical px)
     internal const int SM_CYSCREEN = 1;   // primary monitor height (physical px)
@@ -95,13 +105,24 @@ internal static class Win32
         catch { try { SetForegroundWindow(hWnd); } catch { } }
     }
 
-    /// <summary>Sends a full key press (down + up) by virtual-key code to the focused window.</summary>
-    internal static void TapKey(ushort vk, int holdMs = 90)
+    [DllImport("user32.dll")] private static extern uint MapVirtualKey(uint code, uint mapType);
+    private const uint MAPVK_VK_TO_VSC = 0;
+
+    /// <summary>
+    /// Sends a full key press (down + up) to the focused window, as the key's hardware scan code.
+    /// Roblox reads the keyboard by scan code: a press sent as a virtual-key code alone (scan code 0)
+    /// reached the window but was no key the game knew, so the character never jumped.
+    /// Returns false when Windows did not accept the input.
+    /// </summary>
+    internal static bool TapKey(ushort vk, int holdMs = 90)
     {
-        var down = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk } } };
-        var up = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, dwFlags = KEYEVENTF_KEYUP } } };
-        SendInput(1, new[] { down }, Marshal.SizeOf<INPUT>());
+        ushort scan = (ushort)MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+        uint flags = scan != 0 ? KEYEVENTF_SCANCODE : 0;
+        var down = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags } } };
+        var up = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags | KEYEVENTF_KEYUP } } };
+        bool ok = SendInput(1, new[] { down }, Marshal.SizeOf<INPUT>()) == 1;
         Thread.Sleep(holdMs);
-        SendInput(1, new[] { up }, Marshal.SizeOf<INPUT>());
+        ok &= SendInput(1, new[] { up }, Marshal.SizeOf<INPUT>()) == 1;
+        return ok;
     }
 }

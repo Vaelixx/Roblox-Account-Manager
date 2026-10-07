@@ -310,6 +310,8 @@
                                                              IsChecked="{Binding Action, Converter={StaticResource EqualsToBool}, ConverterParameter=Launch}" />
                                                 <RadioButton GroupName="schedAction" Style="{StaticResource Segment}" Content="{DynamicResource Str.Automation.Schedule.Close}"
                                                              IsChecked="{Binding Action, Converter={StaticResource EqualsToBool}, ConverterParameter=Close}" />
+                                                <RadioButton GroupName="schedAction" Style="{StaticResource Segment}" Content="{DynamicResource Str.Automation.Schedule.Restart}"
+                                                             IsChecked="{Binding Action, Converter={StaticResource EqualsToBool}, ConverterParameter=Restart}" />
                                             </StackPanel>
                                         </Border>
                                     </ctl:SettingItem>

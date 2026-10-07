@@ -213,7 +213,7 @@ public static class DiagnosticsService
             sb.AppendLine($"Tracked clients: {InstanceControlService.Count}");
             sb.AppendLine($"Manager: {ManagerFootprint()}");
             sb.AppendLine($"Anti-AFK: {s.AntiAfkEnabled} ({s.AntiAfkIntervalMinutes}{(s.AntiAfkRandomize ? $"-{s.AntiAfkIntervalMaxMinutes}" : "")} min, key {s.AntiAfkKey})");
-            sb.AppendLine($"Watchdog: {s.WatchdogEnabled} (disconnects: {s.RejoinOnDisconnect} after {s.DisconnectMinutes} min, timed restart: {s.RestartClientsEnabled} every {s.RestartClientsMinutes} min); RAM monitor: {s.RamMonitorEnabled} (force-close: {s.AutoCloseOnHighRam} at {s.RamLimitMb} MB, auto-trim: {s.AutoTrimEnabled})");
+            sb.AppendLine($"Watchdog: {s.WatchdogEnabled} (disconnects: {s.RejoinOnDisconnect} after {s.DisconnectMinutes} min, timed restart: {s.RestartClientsEnabled} every {s.RestartClientsMinutes} min, memory growth: {s.RestartOnRamGrowth} at {s.RamGrowthFactor}x); RAM monitor: {s.RamMonitorEnabled} (force-close: {s.AutoCloseOnHighRam} at {s.RamLimitMb} MB, auto-trim: {s.AutoTrimEnabled}); resize windows: {s.ResizeClientWindows} ({s.ClientWindowWidth}x{s.ClientWindowHeight})");
             sb.AppendLine($"FastFlags: {s.ApplyFFlags} ({s.CustomFFlags.Count} custom), FPS cap: {s.FpsCap}, AFK profile FPS: {s.UltraLowAfk.FpsCap}, profile in effect: {s.ProfileUndo != null}");
             sb.AppendLine($"Local API: {s.WebApiEnabled}, plugins: {s.EnablePlugins}, proxy: {s.EnableProxy}, webhook: {!string.IsNullOrEmpty(s.DiscordWebhookUrl)}");
             sb.AppendLine($"Presets: {s.LaunchPresets.Count} ({string.Join(", ", s.LaunchPresets.GroupBy(p => p.Destination).Select(g => $"{g.Key} {g.Count()}"))}), schedules: {s.ScheduledTasks.Count}");

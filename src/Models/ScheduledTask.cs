@@ -29,4 +29,5 @@ public class ScheduledTask
     public DateTime LastFiredUtc { get; set; } = DateTime.MinValue;
 }
 
-public enum ScheduleAction { Launch, Close }
+/// <summary>Restart closes the target's running clients, then relaunches them one at a time into the same game.</summary>
+public enum ScheduleAction { Launch, Close, Restart }

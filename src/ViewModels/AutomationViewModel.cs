@@ -347,13 +347,13 @@ public class ScheduleItem : ObservableObject
         set { Model.Enabled = value; RaiseSchedule(); _owner.Persist(); }
     }
 
-    /// <summary>"Launch" or "Close".</summary>
+    /// <summary>"Launch", "Close" or "Restart".</summary>
     public string Action
     {
         get => Model.Action.ToString();
         set
         {
-            Model.Action = value == "Close" ? ScheduleAction.Close : ScheduleAction.Launch;
+            Model.Action = Enum.TryParse<ScheduleAction>(value, out var a) ? a : ScheduleAction.Launch;
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsLaunch));
             OnPropertyChanged(nameof(Summary));
@@ -470,10 +470,17 @@ public class ScheduleItem : ObservableObject
         get
         {
             string target = !string.IsNullOrEmpty(Model.PresetName) ? Model.PresetName
-                          : Account?.DisplayNameOrUser ?? L.T("Automation.Schedule.NoTarget");
+                          : Account?.DisplayNameOrUser
+                          ?? L.T(Model.Action == ScheduleAction.Restart ? "Automation.Schedule.AllClients" : "Automation.Schedule.NoTarget");
             string days = Model.Days.Count is 0 or 7 ? L.T("Automation.Schedule.Daily")
                         : string.Join(", ", Days.Where(d => d.IsOn).Select(d => d.Label));
-            return L.T(IsLaunch ? "Automation.Schedule.SummaryLaunch" : "Automation.Schedule.SummaryClose", target, Model.TimeOfDay, days);
+            string key = Model.Action switch
+            {
+                ScheduleAction.Launch => "Automation.Schedule.SummaryLaunch",
+                ScheduleAction.Restart => "Automation.Schedule.SummaryRestart",
+                _ => "Automation.Schedule.SummaryClose",
+            };
+            return L.T(key, target, Model.TimeOfDay, days);
         }
     }
 
@@ -730,6 +737,15 @@ public class AutomationViewModel : ObservableObject
             var ids = preset != null
                 ? _store.Accounts.Where(a => preset.Aliases.Any(k => PresetItem.Matches(a, k))).Select(a => a.UserId).ToList()
                 : item.Account is { } a ? new List<long> { a.UserId } : new List<long>();
+            if (item.Model.Action == ScheduleAction.Restart)
+            {
+                bool everyone = preset == null && item.Account == null;
+                var clients = ProcessRegistry.All.Where(t => everyone || ids.Contains(t.UserId)).ToList();
+                _main.SetStatus(L.T("Automation.Schedule.Restarting"));
+                int back = await WatchdogService.RestartAllAsync(clients);
+                _main.SetStatus(back > 0 ? L.N("Status.RestartedClients", back) : L.T("Status.NoClients"));
+                return;
+            }
             int closed = await Task.Run(() => ids.Sum(InstanceControlService.CloseFor));
             _main.SetStatus(closed > 0 ? L.N("Status.ClosedClients", closed) : L.T("Status.NoClients"));
         }

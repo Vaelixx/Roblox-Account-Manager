@@ -94,16 +94,25 @@ public class AppSettings
     public bool AntiAfkRandomize { get; set; } = false;
     public int AntiAfkIntervalMaxMinutes { get; set; } = 19;   // above the minimum, below Roblox's 20-minute idle kick
 
+    /// <summary>Key presses per visit, a random 0.8–2.5 s apart: one short tap can fall between the frames of a throttled client.</summary>
+    public int AntiAfkPresses { get; set; } = 3;
+
+    /// <summary>Seconds a client keeps focus before its first key press, so a background-throttled client catches up first.</summary>
+    public int AntiAfkFocusSeconds { get; set; } = 2;
+
+    /// <summary>Also focus a client whose log shows it still loading after 45 s: clients in the background can stall mid-load.</summary>
+    public bool AntiAfkHelpLoading { get; set; } = true;
+
     // ---- Crash watchdog ----
     public bool WatchdogEnabled { get; set; } = false;
     public int WatchdogCheckSeconds { get; set; } = 30;
 
     /// <summary>
-    /// Also rejoin when an account with a running client stops showing as in game (a disconnect
-    /// dialog keeps the process alive, so the exit-based watchdog never sees it). Needs presence.
+    /// Also rejoin when a running client's own log shows it out of its game (a disconnect dialog
+    /// keeps the process alive, so the exit-based watchdog never sees it).
     /// </summary>
     public bool RejoinOnDisconnect { get; set; } = false;
-    public int DisconnectMinutes { get; set; } = 3;
+    public int DisconnectMinutes { get; set; } = 1;
 
     /// <summary>Close and relaunch every client after it has run this long (fresh session, memory back).</summary>
     public bool RestartClientsEnabled { get; set; } = false;
@@ -177,6 +186,17 @@ public class AppSettings
     public int RamMonitorSeconds { get; set; } = 10;
     public bool AutoCloseOnHighRam { get; set; } = false;
     public int RamLimitMb { get; set; } = 4096;
+
+    /// <summary>Restart a client once its memory reaches this multiple of its settled size (see RamGrowth).</summary>
+    public bool RestartOnRamGrowth { get; set; } = false;
+    public double RamGrowthFactor { get; set; } = 2.0;
+
+    // ---- Client windows ----
+    /// <summary>Resize each new client window and place it in the first free spot, side by side.</summary>
+    public bool ResizeClientWindows { get; set; } = false;
+    /// <summary>Requested client size in pixels; 0 = the smallest size Roblox allows.</summary>
+    public int ClientWindowWidth { get; set; } = 0;
+    public int ClientWindowHeight { get; set; } = 0;
     public bool AutoTrimEnabled { get; set; } = false;
     public int AutoTrimMinutes { get; set; } = 10;
 

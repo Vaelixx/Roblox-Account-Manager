@@ -227,15 +227,31 @@ public static class ProcessRegistry
     public static void Prune()
     {
         bool removed = false;
+        // Pids of every running client, from the process list itself. Asking a single process can
+        // fail while it is still running (access denied, a busy moment), and treating that as an
+        // exit made the watchdog launch a second client next to the first.
+        HashSet<int>? running = null;
+        try
+        {
+            var procs = Process.GetProcessesByName(ClientProcess);
+            running = procs.Select(p => p.Id).ToHashSet();
+            foreach (var p in procs) p.Dispose();
+        }
+        catch { }
+
         foreach (var kv in _byPid.ToArray())
         {
             bool gone;
-            try
+            if (running != null && !running.Contains(kv.Key)) gone = true;
+            else
             {
-                using var p = Process.GetProcessById(kv.Key);
-                gone = p.HasExited || !IsSameProcess(p, kv.Value);
+                try
+                {
+                    using var p = Process.GetProcessById(kv.Key);
+                    gone = p.HasExited || !IsSameProcess(p, kv.Value, unreadable: running != null);
+                }
+                catch { gone = running == null; }   // listed as running: a failed lookup is not an exit
             }
-            catch { gone = true; } // process no longer exists
 
             if (gone && ((ICollection<KeyValuePair<int, Tracked>>)_byPid).Remove(kv))
             {
@@ -251,7 +267,9 @@ public static class ProcessRegistry
     /// reuse: name and start time together are unique enough that no other program can be
     /// mistaken for a tracked client.
     /// </summary>
-    private static bool IsSameProcess(Process live, Tracked tracked)
+    /// <param name="unreadable">Answer when the process can't be inspected (false everywhere an action
+    /// would land on it; Prune passes true for a pid the process list shows as a running client).</param>
+    private static bool IsSameProcess(Process live, Tracked tracked, bool unreadable = false)
     {
         try
         {
@@ -260,7 +278,7 @@ public static class ProcessRegistry
             if (tracked.StartTimeLocal == default) return true;   // registered before this check existed
             return Math.Abs((live.StartTime - tracked.StartTimeLocal).TotalSeconds) < 2;
         }
-        catch { return false; }
+        catch { return unreadable; }
     }
 
     private static bool SameStart(DateTime a, DateTime b)

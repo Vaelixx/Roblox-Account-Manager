@@ -125,7 +125,10 @@ public static class SettingsService
         s.ScheduledTasks ??= new();
         s.Hotkeys ??= new();
 
-        s.DisconnectMinutes = Math.Clamp(s.DisconnectMinutes, 2, 60);
+        s.DisconnectMinutes = Math.Clamp(s.DisconnectMinutes, 1, 60);
+        s.RamGrowthFactor = double.IsFinite(s.RamGrowthFactor) ? Math.Clamp(s.RamGrowthFactor, 1.2, 10) : 2.0;
+        s.ClientWindowWidth = s.ClientWindowWidth <= 0 ? 0 : Math.Clamp(s.ClientWindowWidth, 100, 7680);
+        s.ClientWindowHeight = s.ClientWindowHeight <= 0 ? 0 : Math.Clamp(s.ClientWindowHeight, 100, 4320);
         s.RestartClientsMinutes = Math.Clamp(s.RestartClientsMinutes, 30, 24 * 60);
         s.AntiAfkIntervalMinutes = Math.Clamp(s.AntiAfkIntervalMinutes, 1, 120);
         s.AntiAfkIntervalMaxMinutes = Math.Clamp(s.AntiAfkIntervalMaxMinutes, s.AntiAfkIntervalMinutes, 120);
