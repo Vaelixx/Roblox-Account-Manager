@@ -641,33 +641,67 @@ public static class RobloxApi
     // ---------------------------------------------------------------
     public record ShareLinkInfo(long PlaceId, string LinkCode);
 
-    /// <summary>Resolves a modern share link (roblox.com/share?code=…&amp;type=Server) to a place and link code.</summary>
-    public static async Task<ShareLinkInfo?> ResolveShareLinkAsync(string cookie, string shareCode)
+    /// <summary>How resolving a share link went. Only <see cref="Resolved"/> comes with a place and link code.</summary>
+    public enum ShareLinkStatus { Resolved, NotAServerLink, SessionRejected, Unreachable }
+
+    /// <param name="Error">For <see cref="ShareLinkStatus.Unreachable"/>: the HTTP status or network error.</param>
+    public record ShareLinkResult(ShareLinkStatus Status, ShareLinkInfo? Info = null, string Error = "");
+
+    /// <summary>
+    /// Resolves a modern share link (roblox.com/share?code=…&amp;type=Server) to a place and link code.
+    /// A rejected session and an unreachable Roblox are told apart from a bad link: another account may
+    /// still resolve the link, and a rate limit or outage passes. Those get one retry here.
+    /// </summary>
+    public static async Task<ShareLinkResult> ResolveShareLinkAsync(string cookie, string shareCode)
     {
-        try
+        if (string.IsNullOrEmpty(cookie)) return new(ShareLinkStatus.SessionRejected);
+
+        string? csrf = await GetCsrfTokenAsync(cookie);
+        string error = "no response";
+        bool retried = false;
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            string? csrf = await GetCsrfTokenAsync(cookie);
-            for (int attempt = 0; attempt < 2; attempt++)
+            try
             {
                 var req = Build(HttpMethod.Post, "https://apis.roblox.com/sharelinks/v1/resolve-link",
                     cookie, csrf, content: Json(new { linkId = shareCode, linkType = "Server" }),
                     referer: "https://www.roblox.com/");
                 using var resp = await HttpFor(cookie).SendAsync(req);
+                int code = (int)resp.StatusCode;
 
                 if (resp.StatusCode == HttpStatusCode.Forbidden &&
                     resp.Headers.TryGetValues("x-csrf-token", out var nt))
-                { csrf = nt.FirstOrDefault(); continue; }
+                { csrf = nt.FirstOrDefault(); error = $"HTTP {code}"; continue; }
+
+                if (code is 401 or 403) return new(ShareLinkStatus.SessionRejected);
+                if (code == 429 || code >= 500)
+                {
+                    error = $"HTTP {code}";
+                    if (retried) break;
+                    retried = true;
+                    await Task.Delay(Backoff(1, resp.Headers.RetryAfter));
+                    continue;
+                }
 
                 using var doc = await ReadJsonAsync(resp);
                 if (doc == null || !doc.RootElement.TryGetProperty("privateServerInviteData", out var d) || d.ValueKind != JsonValueKind.Object)
-                    return null;
+                    return new(ShareLinkStatus.NotAServerLink);
                 long placeId = Long(d, "placeId");
                 string linkCode = Str(d, "linkCode");
-                return placeId > 0 && linkCode.Length > 0 ? new ShareLinkInfo(placeId, linkCode) : null;
+                return placeId > 0 && linkCode.Length > 0
+                    ? new(ShareLinkStatus.Resolved, new ShareLinkInfo(placeId, linkCode))
+                    : new(ShareLinkStatus.NotAServerLink);
             }
-            return null;
+            catch (Exception ex)
+            {
+                // Network failure or timeout: says nothing about the link.
+                error = ex.Message;
+                if (retried) break;
+                retried = true;
+                await Task.Delay(Backoff(1, null));
+            }
         }
-        catch { return null; }
+        return new(ShareLinkStatus.Unreachable, Error: error);
     }
 
     // ---------------------------------------------------------------

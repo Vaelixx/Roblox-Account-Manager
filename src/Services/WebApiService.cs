@@ -16,7 +16,7 @@ namespace RobloxAccountManager.Services;
 ///   GET  /accounts                              list (no cookies)
 ///   POST /launch?account=&amp;placeId=&amp;jobId=       launch one account (instead of jobId: link= a game /
 ///                                               private-server / share link, or followUserId=)
-///   POST /preset?name=                          start a launch preset (runs in the background)
+///   POST /preset?name=                          start a launch preset (runs in the background; 409 while it already runs)
 ///   POST /close?account=                        close that account's tracked clients
 ///   GET  /status?account=                       presence snapshot
 ///   GET  /cookie?account=                       .ROBLOSECURITY (sensitive; off unless enabled in Settings)
@@ -255,7 +255,7 @@ public static class WebApiService
         if (followUserId > 0) target = new JoinTarget(0, FollowUserId: followUserId);
         else
         {
-            var resolved = await JoinTargetResolver.FromServerInputAsync(!string.IsNullOrWhiteSpace(link) ? link : q["jobId"], placeId, () => acc.Cookie);
+            var resolved = await JoinTargetResolver.FromServerInputAsync(!string.IsNullOrWhiteSpace(link) ? link : q["jobId"], placeId, () => new[] { acc.Cookie });
             if (resolved.Target == null) { await WriteJsonAsync(ctx, 400, new { ok = false, message = resolved.Error }); return; }
             target = resolved.Target;
         }
@@ -269,15 +269,25 @@ public static class WebApiService
         var preset = PresetService.Find(ctx.Request.QueryString["name"] ?? "");
         if (preset == null) { await WriteJsonAsync(ctx, 404, new { error = "preset not found" }); return; }
 
+        // Already launching (from here or the Automation page): a retried request must not launch every
+        // account a second time.
+        string name = preset.Name;
+        if (!PresetService.TryBeginRun(name))
+        {
+            await WriteJsonAsync(ctx, 409, new { ok = false, message = $"preset '{name}' is already running" });
+            return;
+        }
+
         // A preset can take minutes (delays between accounts); answer now instead of holding the request.
         _ = Task.Run(async () =>
         {
             try
             {
                 var r = await PresetService.LaunchAsync(preset);
-                DiagnosticsService.Log("webapi", $"Preset '{preset.Name}': {r.Launched} launched, {r.Failed} failed");
+                DiagnosticsService.Log("webapi", $"Preset '{name}': {r.Launched} launched, {r.Failed} failed");
             }
-            catch (Exception ex) { DiagnosticsService.Warn("webapi", $"Preset '{preset.Name}' failed", ex); }
+            catch (Exception ex) { DiagnosticsService.Warn("webapi", $"Preset '{name}' failed", ex); }
+            finally { PresetService.EndRun(name); }
         });
         await WriteJsonAsync(ctx, 202, new { ok = true, started = preset.Name, accounts = preset.Aliases.Count });
     }

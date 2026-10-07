@@ -65,9 +65,12 @@ public class AccountsViewModel : ObservableObject
         };
 
         PlaceIdText = SettingsService.Current.DefaultPlaceId > 0 ? SettingsService.Current.DefaultPlaceId.ToString() : "";
-        // The server box and the player box keep what was last launched with, like the place does.
-        JobIdText = SettingsService.Current.LastServerInput;
-        FollowText = SettingsService.Current.LastFollowInput;
+        // The server box and the player box keep what was last launched with, like the place does. Not a
+        // specific public server (one remembered by an older version is dropped here too), and while
+        // usernames are hidden for screen sharing neither a private link nor the followed player is shown.
+        string lastServer = SettingsService.Current.LastServerInput;
+        SetServerInput(LaunchBarInput.IsWorthRemembering(lastServer) ? lastServer : "");
+        FollowText = SettingsService.Current.HideUsernames ? "" : SettingsService.Current.LastFollowInput;
         foreach (var p in SettingsService.Current.SavedPlaces) SavedPlaces.Add(p);
 
         AddCommand = new AsyncRelayCommand(_ => AddAsync(0));
@@ -151,6 +154,7 @@ public class AccountsViewModel : ObservableObject
 
     public void RefreshLocalized()
     {
+        if (_hiddenServer != null) SetServerInput(_hiddenServer);   // its placeholder in the new language
         OnPropertyChanged(string.Empty);
         RefreshView();
     }
@@ -375,7 +379,12 @@ public class AccountsViewModel : ObservableObject
     public bool HasSelection => _selected != null;
 
     public bool MaskUsernames => SettingsService.Current.HideUsernames;
-    public void RefreshMask() => OnPropertyChanged(nameof(MaskUsernames));
+
+    public void RefreshMask()
+    {
+        OnPropertyChanged(nameof(MaskUsernames));
+        SetServerInput(_hiddenServer ?? JobIdText);   // hides a private link already in the server box, or shows it again
+    }
 
     private string _inspectorTab = "Overview";
     public string InspectorTab { get => _inspectorTab; set => SetField(ref _inspectorTab, value); }
@@ -846,7 +855,27 @@ public class AccountsViewModel : ObservableObject
     }
 
     private string _jobIdText = "";
-    public string JobIdText { get => _jobIdText; set => SetField(ref _jobIdText, value ?? ""); }
+    public string JobIdText
+    {
+        get => _jobIdText;
+        set { if (SetField(ref _jobIdText, value ?? "")) _hiddenServer = null; }   // typed over the placeholder
+    }
+
+    // A private-server or share link the launch bar uses without showing it. While usernames are hidden
+    // for screen sharing, a link restored at startup or picked from a saved place would let anyone
+    // watching join that server, so the server box shows a placeholder instead.
+    private string? _hiddenServer;
+
+    /// <summary>What the server box stands for: the hidden link, or what is typed in it.</summary>
+    private string ServerInput => _hiddenServer ?? JobIdText.Trim();
+
+    /// <summary>Fills the server box, keeping a private link out of sight while usernames are hidden.</summary>
+    private void SetServerInput(string value)
+    {
+        bool hide = SettingsService.Current.HideUsernames && LaunchBarInput.IsPrivateLink(value);
+        JobIdText = hide ? L.T("Launch.ServerHidden") : value;
+        _hiddenServer = hide ? value.Trim() : null;
+    }
 
     private string _followText = "";
     public string FollowText { get => _followText; set => SetField(ref _followText, value ?? ""); }
@@ -931,6 +960,7 @@ public class AccountsViewModel : ObservableObject
 
     private List<Account>? LaunchTargets()
     {
+        if (RefuseWhileLaunching()) return null;   // before any server search or lookup
         var targets = Targets();
         if (targets.Count == 0)
         {
@@ -957,7 +987,7 @@ public class AccountsViewModel : ObservableObject
     /// </summary>
     private async Task<JoinTarget?> ResolveJoinTargetAsync(List<Account> sel)
     {
-        string input = JobIdText.Trim();
+        string input = ServerInput;
         long placeId = ParsePlaceId(PlaceIdText);
         bool isLink = JoinLinks.LooksLikeLink(input);
 
@@ -965,11 +995,14 @@ public class AccountsViewModel : ObservableObject
         if (!isLink && !TryPlaceId(out placeId)) return null;
         if (isLink && JoinLinks.Parse(input).ShareCode != null) _main.SetStatus(L.T("Launch.ResolvingLink"));
 
+        // A share link is read with the accounts being launched (valid ones first), then any valid account.
         var result = await JoinTargetResolver.FromServerInputAsync(input, placeId,
-            () => sel.FirstOrDefault(a => a.IsValid)?.Cookie ?? _store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie ?? "");
+            () => sel.OrderByDescending(a => a.IsValid).Select(a => a.Cookie)
+                     .Append(_store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie ?? ""));
         if (result.Target != null)
         {
-            RememberInput(input, null);
+            // A specific public server is gone by the next start, so the box then starts empty instead.
+            RememberInput(LaunchBarInput.IsWorthRemembering(input) ? input : "", null);
             return result.Target;
         }
 
@@ -1055,17 +1088,31 @@ public class AccountsViewModel : ObservableObject
         _main.OpenServersFor(placeId);
     }
 
+    /// <summary>
+    /// True, with a status message, while a batch is launching. Launch, Smart join, Server hop, Squad,
+    /// Follow and the hotkeys are separate commands; a second batch would share the first one's Stop button.
+    /// </summary>
+    private bool RefuseWhileLaunching()
+    {
+        if (!IsLaunching) return false;
+        _main.SetStatus(L.T("Launch.AlreadyRunning"));
+        return true;
+    }
+
     private async Task LaunchSequential(List<Account> accounts, JoinTarget target)
     {
+        // Checked again here: two commands can both get past LaunchTargets while their lookups run.
+        if (RefuseWhileLaunching()) return;
         if (!RequirementsService.IsRobloxInstalled())
         {
             DialogService.OfferDownload(L.T("Requirements.NoRoblox.Title"), L.T("Requirements.NoRoblox.Body"), "https://www.roblox.com/download");
             return;
         }
 
+        var cts = new CancellationTokenSource();
+        _launchCts = cts;
         Busy = true;
         IsLaunching = true;
-        _launchCts = new CancellationTokenSource();
         Account? current = null;
         LauncherService.BatchResult result;
         try
@@ -1085,15 +1132,19 @@ public class AccountsViewModel : ObservableObject
                 {
                     if (current != null) current.IsBusy = false;
                     _main.SetStatus(left > 0 ? L.T("Launch.NextIn", left) : L.T("Launch.WaitingForClient", current?.DisplayNameOrUser ?? ""));
-                }, _launchCts.Token);
+                }, cts.Token);
             _store.Save();
         }
         finally
         {
             foreach (var a in accounts) a.IsBusy = false;
-            _launchCts.Dispose();
-            _launchCts = null;
-            IsLaunching = false;
+            // Only what this batch set up: never another batch's token or Stop button.
+            if (ReferenceEquals(_launchCts, cts))
+            {
+                _launchCts = null;
+                IsLaunching = false;
+            }
+            cts.Dispose();
             Busy = false;
         }
 
@@ -1138,7 +1189,7 @@ public class AccountsViewModel : ObservableObject
             Id = existing?.Id is { Length: > 0 } id ? id : Guid.NewGuid().ToString("N"),
             Name = name,
             PlaceId = placeId,
-            Server = JobIdText.Trim(),
+            Server = ServerInput,
             IconUrl = GameIcon,
             UniverseId = _lastUniverseId,
         });
@@ -1160,7 +1211,7 @@ public class AccountsViewModel : ObservableObject
         if (place == null) return;
         SavedPlacesOpen = false;
         PlaceIdText = place.PlaceId.ToString();
-        JobIdText = place.Server;
+        SetServerInput(place.Server);
     }
 
     private bool _loadingIcons;

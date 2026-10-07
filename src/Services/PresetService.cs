@@ -43,9 +43,10 @@ public static class PresetService
         if (accounts.Count == 0)
             return new(0, errors.Count, errors, L.T("Automation.Preset.NoAccounts"));
 
-        // A share link needs a signed-in session to resolve; any valid account of the preset will do.
+        // A share link needs a signed-in session to resolve; any account of the preset will do, so one
+        // whose session has expired just hands over to the next (valid ones first).
         var target = await JoinTargetResolver.ForPresetAsync(preset,
-            () => accounts.FirstOrDefault(a => a.IsValid)?.Cookie ?? accounts[0].Cookie);
+            () => accounts.OrderByDescending(a => a.IsValid).Select(a => a.Cookie));
         if (target.Target == null)
         {
             DiagnosticsService.Warn("preset", $"Preset '{preset.Name}' has no usable destination");
@@ -64,4 +65,20 @@ public static class PresetService
     public static LaunchPreset? Find(string name) =>
         SettingsService.Current.LaunchPresets
             .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    // Presets launching right now, by name. The Automation page and the local API both check it, so a
+    // second click or a retried request cannot start the same preset again and launch every account twice.
+    private static readonly HashSet<string> _running = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Marks a preset as launching. False when it already is; otherwise pair it with <see cref="EndRun"/>.</summary>
+    public static bool TryBeginRun(string name)
+    {
+        lock (_running) return _running.Add(name);
+    }
+
+    /// <summary>Ends what <see cref="TryBeginRun"/> began. Pass the same name, even if the preset was renamed meanwhile.</summary>
+    public static void EndRun(string name)
+    {
+        lock (_running) _running.Remove(name);
+    }
 }

@@ -644,6 +644,9 @@ public class AutomationViewModel : ObservableObject
             DialogService.OfferDownload(L.T("Requirements.NoRoblox.Title"), L.T("Requirements.NoRoblox.Body"), "https://www.roblox.com/download");
             return;
         }
+        // The same preset may already be launching through the local API.
+        string runName = item.Model.Name;
+        if (!PresetService.TryBeginRun(runName)) { _main.SetStatus(L.T("Automation.Preset.AlreadyRunning")); return; }
 
         IsPresetRunning = true;
         _presetCts = new CancellationTokenSource();
@@ -658,6 +661,7 @@ public class AutomationViewModel : ObservableObject
         }
         finally
         {
+            PresetService.EndRun(runName);
             _presetCts.Dispose();
             _presetCts = null;
             IsPresetRunning = false;

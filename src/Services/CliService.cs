@@ -6,7 +6,7 @@ namespace RobloxAccountManager.Services;
 /// <summary>
 /// Parses and executes command-line requests, both at startup and when forwarded from a
 /// second instance via <see cref="SingleInstanceService"/>. Supported today:
-/// <code>--launch "&lt;alias-or-username&gt;" &lt;placeId&gt; [jobId]</code>
+/// <code>--launch "&lt;alias-or-username&gt;" &lt;placeId or game link&gt; [jobId or private-server link]</code>
 /// Updater args (<c>--apply-update</c>, <c>--post-update</c>) are owned by <see cref="App"/>
 /// and deliberately ignored here.
 /// </summary>
@@ -36,15 +36,19 @@ public static class CliService
         }
 
         string who = args[idx + 1];
+        string place = args[idx + 2];
 
-        var digits = new string(args[idx + 2].Where(char.IsDigit).ToArray());
-        if (!long.TryParse(digits, out long placeId) || placeId <= 0)
-            return L.T("Cli.BadPlace", args[idx + 2]);
+        // Same reading as the launch bar's Place box: a game link gives the id in its path. Keeping every
+        // digit turned ".../games/8737899170/Pet-Simulator-99" into place 873789917099.
+        long placeId = JoinLinks.ParsePlaceId(place);
+        if (placeId <= 0 && !JoinLinks.LooksLikeLink(place))
+            return L.T("Cli.BadPlace", place);
 
-        // Optional 4th token is a Job ID, unless it's the next flag.
-        string? jobId = idx + 3 < args.Length && !args[idx + 3].StartsWith("--")
+        // Optional 4th token is a Job ID or a link, unless it's the next flag. Without one, a link given as
+        // the place still counts, so its private-server code or server id isn't dropped.
+        string? server = idx + 3 < args.Length && !args[idx + 3].StartsWith("--")
             ? args[idx + 3]
-            : null;
+            : JoinLinks.LooksLikeLink(place) ? place : null;
 
         var acc = FindAccount(vm.Store, who);
         if (acc == null)
@@ -54,8 +58,18 @@ public static class CliService
             return miss;
         }
 
+        // The launch bar's rules: links are read the same way, and a malformed Job ID is refused instead
+        // of being sent to Roblox.
+        var resolved = await JoinTargetResolver.FromServerInputAsync(server, placeId, () => new[] { acc.Cookie });
+        if (resolved.Target == null)
+        {
+            string error = resolved.Error ?? L.T("Cli.BadPlace", place);
+            vm.SetStatus(error);
+            return error;
+        }
+
         vm.SetStatus(L.T("Cli.Launching", acc.DisplayNameOrUser));
-        var r = await LauncherService.LaunchAsync(acc, placeId, jobId);
+        var r = await LauncherService.LaunchAsync(acc, resolved.Target);
         string msg = r.Success
             ? L.T("Status.Launched", acc.DisplayNameOrUser)
             : r.Message;
