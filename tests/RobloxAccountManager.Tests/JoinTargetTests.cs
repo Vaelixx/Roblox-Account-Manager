@@ -78,6 +78,29 @@ public class JoinLinksTests
     }
 
     [Theory]
+    [InlineData("0f8b2c1e-1234-4abc-9def-0123456789ab", "0f8b2c1e-1234-4abc-9def-0123456789ab")]
+    [InlineData(" \"0f8b2c1e-1234-4abc-9def-0123456789ab\", ", "0f8b2c1e-1234-4abc-9def-0123456789ab")]   // copied out of JSON or a list
+    [InlineData("'0F8B2C1E-1234-4ABC-9DEF-0123456789AB';", "0F8B2C1E-1234-4ABC-9DEF-0123456789AB")]
+    [InlineData("server 0f8b2c1e-1234-4abc-9def-0123456789ab", null)]   // a GUID inside other text is not an id
+    [InlineData("{0f8b2c1e-1234-4abc-9def-0123456789ab}", null)]
+    [InlineData("0f8b2c1e12344abc9def0123456789ab", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void NormalizeJobId(string? input, string? expected)
+    {
+        Assert.Equal(expected, JoinLinks.NormalizeJobId(input));
+        Assert.Equal(expected != null, JoinLinks.LooksLikeJobId(input));
+    }
+
+    [Fact]
+    public void Deep_link_with_a_malformed_instance_has_no_job()
+    {
+        var p = JoinLinks.Parse("roblox://experiences/start?placeId=606849621&gameInstanceId=abc0f8b2c1e-1234-4abc-9def-0123456789ab");
+        Assert.Equal(606849621, p.PlaceId);
+        Assert.Null(p.JobId);
+    }
+
+    [Theory]
     [InlineData("920587237", 920587237)]
     [InlineData(" 920587237 ", 920587237)]
     [InlineData("https://www.roblox.com/games/920587237/Adopt-Me?privateServerLinkCode=555", 920587237)]   // not 920587237555
