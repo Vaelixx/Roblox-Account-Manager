@@ -61,7 +61,7 @@ public static class RobloxClientSettingsService
     /// </summary>
     public static bool WriteFramerateCap(int cap)
     {
-        if (cap <= 0) return false;
+        if (cap == 0) return false;   // negative is Roblox's own "default"; restoring it after a profile is legitimate
         string? file = SettingsFile();
         if (file == null) return false;
 

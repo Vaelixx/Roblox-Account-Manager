@@ -76,15 +76,38 @@ public class AppSettings
     public bool SkipChromiumPrompt { get; set; } = false;
     public List<SavedPlace> SavedPlaces { get; set; } = new();
 
+    /// <summary>The launch bar's server box (Job ID or private/share link) and player box from the last launch.</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
+    public string LastServerInput { get; set; } = "";
+    public string LastFollowInput { get; set; } = "";
+
     // ---- Anti-AFK ----
     public bool AntiAfkEnabled { get; set; } = false;
     public int AntiAfkIntervalMinutes { get; set; } = 15;
     public string AntiAfkKey { get; set; } = "Space";
     public bool AntiAfkRestoreFocus { get; set; } = true;
 
+    /// <summary>
+    /// Pick each client's next interval at random between <see cref="AntiAfkIntervalMinutes"/> and
+    /// <see cref="AntiAfkIntervalMaxMinutes"/>, so several clients don't all get their key press at once.
+    /// </summary>
+    public bool AntiAfkRandomize { get; set; } = false;
+    public int AntiAfkIntervalMaxMinutes { get; set; } = 14;
+
     // ---- Crash watchdog ----
     public bool WatchdogEnabled { get; set; } = false;
     public int WatchdogCheckSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Also rejoin when an account with a running client stops showing as in game (a disconnect
+    /// dialog keeps the process alive, so the exit-based watchdog never sees it). Needs presence.
+    /// </summary>
+    public bool RejoinOnDisconnect { get; set; } = false;
+    public int DisconnectMinutes { get; set; } = 3;
+
+    /// <summary>Close and relaunch every client after it has run this long (fresh session, memory back).</summary>
+    public bool RestartClientsEnabled { get; set; } = false;
+    public int RestartClientsMinutes { get; set; } = 180;
 
     // ---- Startup checks ----
     public bool ValidateCookiesOnStartup { get; set; } = false;
@@ -107,6 +130,21 @@ public class AppSettings
     public bool PauseVoxelizer { get; set; } = false;
     public bool AltEnterFullscreen { get; set; } = false;
     public Dictionary<string, string> CustomFFlags { get; set; } = new();
+
+    // ---- Performance profiles (see PerformanceProfiles) ----
+    public UltraLowOptions UltraLowAfk { get; set; } = new();
+
+    /// <summary>What the last profile launch changed in the flag files, so the next normal launch can put it back.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ProfileUndoState? ProfileUndo { get; set; }
+
+    /// <summary>Roblox's frame-rate cap from before a profile changed it; null when no profile is in effect.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? FpsCapBeforeProfile { get; set; }
+
+    /// <summary>The cap the profile wrote, so it is only put back while the file still holds it.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? FpsCapWrittenByProfile { get; set; }
 
     // ---- Proxy (the manager's own Roblox web calls) ----
     public bool EnableProxy { get; set; } = false;
@@ -183,4 +221,11 @@ public class AppSettings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool UnlockFps { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int MaxFps { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool FFlagUnlockFps { get; set; }
+}
+
+/// <summary>Flags a performance profile wrote, and per flag file the values they replaced.</summary>
+public class ProfileUndoState
+{
+    public Dictionary<string, string> Written { get; set; } = new();
+    public Dictionary<string, Dictionary<string, string>> Previous { get; set; } = new();
 }

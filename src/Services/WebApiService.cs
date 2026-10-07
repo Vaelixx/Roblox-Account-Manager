@@ -14,7 +14,9 @@ namespace RobloxAccountManager.Services;
 /// Endpoints:
 ///   GET  /ping                                  health, no auth
 ///   GET  /accounts                              list (no cookies)
-///   POST /launch?account=&amp;placeId=&amp;jobId=       launch one account
+///   POST /launch?account=&amp;placeId=&amp;jobId=       launch one account (instead of jobId: link= a game /
+///                                               private-server / share link, or followUserId=)
+///   POST /preset?name=                          start a launch preset (runs in the background)
 ///   POST /close?account=                        close that account's tracked clients
 ///   GET  /status?account=                       presence snapshot
 ///   GET  /cookie?account=                       .ROBLOSECURITY (sensitive; off unless enabled in Settings)
@@ -141,8 +143,9 @@ public static class WebApiService
                 case "/accounts": await HandleAccountsAsync(ctx); break;
                 case "/status":   await HandleStatusAsync(ctx);   break;
                 case "/launch" when isPost: await HandleLaunchAsync(ctx); break;
+                case "/preset" when isPost: await HandlePresetAsync(ctx); break;
                 case "/close" when isPost:  await HandleCloseAsync(ctx);  break;
-                case "/launch" or "/close":
+                case "/launch" or "/close" or "/preset":
                     await WriteJsonAsync(ctx, 405, new { error = "use POST" });
                     break;
                 case "/cookie":
@@ -241,12 +244,42 @@ public static class WebApiService
         var acc = Resolve(ctx.Request.QueryString["account"]);
         if (acc == null) { await WriteJsonAsync(ctx, 404, new { error = "account not found" }); return; }
 
-        long.TryParse(ctx.Request.QueryString["placeId"], out var placeId);
-        if (placeId == 0) placeId = SettingsService.Current.DefaultPlaceId;
-        var jobId = ctx.Request.QueryString["jobId"];
+        var q = ctx.Request.QueryString;
+        long.TryParse(q["placeId"], out var placeId);
+        long.TryParse(q["followUserId"], out var followUserId);
+        string? link = q["link"];
+        if (placeId == 0 && followUserId <= 0 && string.IsNullOrWhiteSpace(link)) placeId = SettingsService.Current.DefaultPlaceId;
 
-        var result = await LauncherService.LaunchAsync(acc, placeId, string.IsNullOrWhiteSpace(jobId) ? null : jobId);
+        // Same destination rules as the launch bar: a link or Job ID goes through the shared resolver.
+        JoinTarget target;
+        if (followUserId > 0) target = new JoinTarget(0, FollowUserId: followUserId);
+        else
+        {
+            var resolved = await JoinTargetResolver.FromServerInputAsync(!string.IsNullOrWhiteSpace(link) ? link : q["jobId"], placeId, () => acc.Cookie);
+            if (resolved.Target == null) { await WriteJsonAsync(ctx, 400, new { ok = false, message = resolved.Error }); return; }
+            target = resolved.Target;
+        }
+
+        var result = await LauncherService.LaunchAsync(acc, target);
         await WriteJsonAsync(ctx, result.Success ? 200 : 400, new { ok = result.Success, message = result.Message });
+    }
+
+    private static async Task HandlePresetAsync(HttpListenerContext ctx)
+    {
+        var preset = PresetService.Find(ctx.Request.QueryString["name"] ?? "");
+        if (preset == null) { await WriteJsonAsync(ctx, 404, new { error = "preset not found" }); return; }
+
+        // A preset can take minutes (delays between accounts); answer now instead of holding the request.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var r = await PresetService.LaunchAsync(preset);
+                DiagnosticsService.Log("webapi", $"Preset '{preset.Name}': {r.Launched} launched, {r.Failed} failed");
+            }
+            catch (Exception ex) { DiagnosticsService.Warn("webapi", $"Preset '{preset.Name}' failed", ex); }
+        });
+        await WriteJsonAsync(ctx, 202, new { ok = true, started = preset.Name, accounts = preset.Aliases.Count });
     }
 
     private static async Task HandleCloseAsync(HttpListenerContext ctx)

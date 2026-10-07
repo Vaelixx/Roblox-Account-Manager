@@ -442,7 +442,11 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{Binding CheckedText}" VerticalAlignment="Center" FontWeight="Medium" Margin="0,0,14,0" />
                             <Button Style="{StaticResource Btn.Primary}" Height="30" ctl:Ui.Icon="{StaticResource Icon.Play}"
-                                    Content="{DynamicResource Str.Accounts.Bulk.Launch}" Command="{Binding LaunchCommand}" />
+                                    Content="{DynamicResource Str.Accounts.Bulk.Launch}" Command="{Binding LaunchCommand}"
+                                    Visibility="{Binding IsLaunching, Converter={StaticResource InverseBoolToVis}}" />
+                            <Button Style="{StaticResource Btn.Secondary}" Height="30" ctl:Ui.Icon="{StaticResource Icon.Stop}" Foreground="{DynamicResource DangerBrush}"
+                                    Content="{DynamicResource Str.Launch.Stop}" Command="{Binding StopLaunchCommand}"
+                                    Visibility="{Binding IsLaunching, Converter={StaticResource BoolToVis}}" />
                             <Button Style="{StaticResource Btn.Ghost}" Height="30" Margin="4,0,0,0" ctl:Ui.Icon="{StaticResource Icon.Folder}"
                                     Content="{DynamicResource Str.Accounts.Bulk.Group}" Command="{Binding SetGroupCommand}" />
                             <Button Style="{StaticResource Btn.Ghost}" Height="30" ctl:Ui.Icon="{StaticResource Icon.ShieldCheck}"
@@ -608,7 +612,7 @@
                                                                                 </Border>
                                                                                 <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                                                                                     <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                                                                                    <TextBlock Text="{Binding PlaceId}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" />
+                                                                                    <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" />
                                                                                 </StackPanel>
                                                                             </Grid>
                                                                         </Button>
@@ -637,7 +641,12 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <Button Style="{StaticResource Btn.Primary}" Height="38" HorizontalAlignment="Stretch" ctl:Ui.Icon="{StaticResource Icon.Play}"
-                                                Content="{DynamicResource Str.Launch.Launch}" Command="{Binding LaunchCommand}" />
+                                                Content="{DynamicResource Str.Launch.Launch}" Command="{Binding LaunchCommand}"
+                                                Visibility="{Binding IsLaunching, Converter={StaticResource InverseBoolToVis}}" />
+                                        <Button Style="{StaticResource Btn.Secondary}" Height="38" HorizontalAlignment="Stretch" ctl:Ui.Icon="{StaticResource Icon.Stop}"
+                                                Foreground="{DynamicResource DangerBrush}" Content="{DynamicResource Str.Launch.Stop}" Command="{Binding StopLaunchCommand}"
+                                                ToolTip="{DynamicResource Str.Launch.Stop.Tip}"
+                                                Visibility="{Binding IsLaunching, Converter={StaticResource BoolToVis}}" />
                                         <Button Grid.Column="1" Style="{StaticResource Btn.Secondary}" Height="38" Width="38" Padding="0" Margin="6,0,0,0"
                                                 ctl:Ui.Icon="{StaticResource Icon.ChevronDown}" ToolTip="{DynamicResource Str.Launch.More}" Click="MoreMenu_Click">
                                             <Button.ContextMenu>

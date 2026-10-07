@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 
+using RobloxAccountManager.Models;
+
 namespace RobloxAccountManager.Services;
 
 /// <summary>
@@ -25,6 +27,7 @@ public static class InstanceControlService
         public string Alias { get; init; } = "";
         public long PlaceId { get; init; }
         public string? JobId { get; init; }
+        public JoinTarget Target { get; init; } = new(0);
         public TimeSpan Uptime { get; init; }
         public long MemoryBytes { get; init; }
 
@@ -98,6 +101,7 @@ public static class InstanceControlService
                     Alias = t.Alias,
                     PlaceId = t.PlaceId,
                     JobId = t.JobId,
+                    Target = t.Target,
                     Uptime = t.Uptime,
                     MemoryBytes = ProcessRegistry.MemoryBytes(token),
                     IsExternal = t.IsExternal,
@@ -273,6 +277,25 @@ public static class InstanceControlService
         return moved;
     }
 
+    /// <summary>
+    /// Minimizes one client without taking focus from whatever the user is doing. False while it has
+    /// no window yet (still on the splash screen) or after it exited.
+    /// </summary>
+    public static bool Minimize(int pid)
+        => ProcessRegistry.TryGetToken(pid, out var token) && Minimize(token);
+
+    public static bool Minimize(ProcessRegistry.ProcessToken token)
+    {
+        try
+        {
+            var hWnd = ProcessRegistry.WindowHandle(token);
+            if (hWnd == IntPtr.Zero) return false;
+            Win32.ShowWindow(hWnd, SW_SHOWMINNOACTIVE);
+            return true;
+        }
+        catch { return false; }
+    }
+
     /// <summary>Minimizes every client window (get them out of the way). Returns how many were hidden.</summary>
     public static int MinimizeAll()
     {
@@ -305,6 +328,7 @@ public static class InstanceControlService
     /// expects focus to move on after minimizing everything.
     /// </summary>
     private const int SW_MINIMIZE = 6;
+    private const int SW_SHOWMINNOACTIVE = 7;
 
     /// <summary>Main-window handles of all tracked clients; ones still loading are skipped.</summary>
     private static List<IntPtr> LiveWindows()

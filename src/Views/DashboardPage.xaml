@@ -158,6 +158,28 @@
                             </Grid>
                             <Border DockPanel.Dock="Top" Style="{StaticResource Divider}" />
 
+                            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding WaitingRejoins}" Margin="12,8,12,0" Focusable="False"
+                                          Visibility="{Binding HasWaitingRejoins, Converter={StaticResource BoolToVis}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:WaitingRejoinRow}">
+                                        <Border CornerRadius="{StaticResource RadiusMd}" Padding="10,6" Margin="0,0,0,6" Background="{DynamicResource HoverOverlayBrush}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Text}" FontSize="12.5" TextWrapping="Wrap" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                <Button Grid.Column="1" Style="{StaticResource Btn.Ghost}" Height="28" Margin="10,0,0,0"
+                                                        Content="{DynamicResource Str.Launch.Stop}" ToolTip="{DynamicResource Str.Watchdog.Stop.Tip}"
+                                                        Command="{Binding DataContext.CancelRejoinCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding UserId}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
                             <Grid>
                                 <ItemsControl ItemsSource="{Binding Clients}" Margin="6,6,6,8" Focusable="False">
                                     <ItemsControl.ItemTemplate>
@@ -189,6 +211,10 @@
                                                         <Button Style="{StaticResource Btn.Icon}" Width="30" Height="30" ctl:Ui.Icon="{StaticResource Icon.External}"
                                                                 ToolTip="{DynamicResource Str.Clients.Focus}" IsEnabled="{Binding HasWindow}"
                                                                 Command="{Binding DataContext.FocusClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Style="{StaticResource Btn.Icon}" Width="30" Height="30" ctl:Ui.Icon="{StaticResource Icon.Minimize}"
+                                                                ToolTip="{DynamicResource Str.Clients.Minimize}" IsEnabled="{Binding HasWindow}"
+                                                                Command="{Binding DataContext.MinimizeClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}" />
                                                         <Button Style="{StaticResource Btn.Icon}" Width="30" Height="30" ctl:Ui.Icon="{StaticResource Icon.Close}"
                                                                 ToolTip="{DynamicResource Str.Clients.Close}"

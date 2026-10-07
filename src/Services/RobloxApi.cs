@@ -639,46 +639,6 @@ public static class RobloxApi
     // ---------------------------------------------------------------
     //  Private-server / join-link parsing
     // ---------------------------------------------------------------
-    public record ParsedJoinLink(long PlaceId, string? LinkCode, string? ShareCode, string? JobId);
-
-    /// <summary>
-    /// Pulls what it can out of a pasted Roblox link without a network call:
-    /// <c>…/games/{placeId}/name?privateServerLinkCode={code}</c>, a plain game link,
-    /// <c>…/share?code={code}&amp;type=Server</c> (resolved by <see cref="ResolveShareLinkAsync"/>),
-    /// and <c>roblox://experiences/start?placeId=…&amp;gameInstanceId=…</c> deep links.
-    /// </summary>
-    public static ParsedJoinLink ParseJoinLink(string input)
-    {
-        long placeId = 0; string? linkCode = null, shareCode = null, jobId = null;
-        try
-        {
-            var uri = new Uri(input.Trim());
-            var q = HttpUtility.ParseQueryString(uri.Query);
-
-            var m = Regex.Match(uri.AbsolutePath, @"/games/(\d+)", RegexOptions.IgnoreCase);
-            if (m.Success) long.TryParse(m.Groups[1].Value, out placeId);
-            if (placeId == 0) long.TryParse(q["placeId"] ?? q["placeid"], out placeId);
-
-            linkCode = q["privateServerLinkCode"] ?? q["linkCode"];
-
-            string? instance = q["gameInstanceId"] ?? q["gameId"] ?? q["jobId"];
-            if (LooksLikeJobId(instance)) jobId = instance!.Trim();
-
-            string? code = q["code"];
-            bool isShare = uri.AbsolutePath.Contains("share", StringComparison.OrdinalIgnoreCase)
-                           || string.Equals(q["type"], "Server", StringComparison.OrdinalIgnoreCase);
-            if (!string.IsNullOrEmpty(code) && isShare) shareCode = code;
-        }
-        catch { }
-        return new ParsedJoinLink(placeId,
-            string.IsNullOrWhiteSpace(linkCode) ? null : linkCode,
-            string.IsNullOrWhiteSpace(shareCode) ? null : shareCode,
-            jobId);
-    }
-
-    public static bool LooksLikeJobId(string? text)
-        => text != null && Guid.TryParseExact(text.Trim(), "D", out _);
-
     public record ShareLinkInfo(long PlaceId, string LinkCode);
 
     /// <summary>Resolves a modern share link (roblox.com/share?code=…&amp;type=Server) to a place and link code.</summary>

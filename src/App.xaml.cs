@@ -90,6 +90,7 @@ public partial class App : Application
         // Central diagnostics sink. Installed before anything else runs so the very first
         // failure — a corrupt settings file, an unreadable data folder — is already recorded.
         DiagnosticsService.Install();
+        if (DataFolderMigration.LastResult is { } migrated) DiagnosticsService.Warn("data", migrated);
 
         base.OnStartup(e);
 

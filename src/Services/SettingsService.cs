@@ -38,7 +38,7 @@ public static class SettingsService
                 Migrate(Current);
                 Save();
             }
-            Normalize(Current);
+            if (Normalize(Current)) Save();
         }
         catch (Exception ex)
         {
@@ -99,8 +99,12 @@ public static class SettingsService
         }
     }
 
-    /// <summary>Clamps values a hand-edited file could have pushed out of range.</summary>
-    private static void Normalize(AppSettings s)
+    /// <summary>
+    /// Clamps values a hand-edited file could have pushed out of range. Returns true when a stored
+    /// value had to be upgraded in a way worth saving straight away (a legacy preset destination —
+    /// its private-server link moves into an encrypted field).
+    /// </summary>
+    private static bool Normalize(AppSettings s)
     {
         s.AccountJoinDelay = Math.Clamp(s.AccountJoinDelay, 0, 600);
         s.ShufflePageCount = Math.Clamp(s.ShufflePageCount, 1, 25);
@@ -118,6 +122,38 @@ public static class SettingsService
         s.LaunchPresets ??= new();
         s.ScheduledTasks ??= new();
         s.Hotkeys ??= new();
+
+        s.DisconnectMinutes = Math.Clamp(s.DisconnectMinutes, 2, 60);
+        s.RestartClientsMinutes = Math.Clamp(s.RestartClientsMinutes, 30, 24 * 60);
+        s.AntiAfkIntervalMinutes = Math.Clamp(s.AntiAfkIntervalMinutes, 1, 120);
+        s.AntiAfkIntervalMaxMinutes = Math.Clamp(s.AntiAfkIntervalMaxMinutes, s.AntiAfkIntervalMinutes, 120);
+        s.UltraLowAfk ??= new();
+        s.UltraLowAfk.FpsCap = s.UltraLowAfk.FpsCap <= 0 ? 0 : Math.Clamp(s.UltraLowAfk.FpsCap, 5, 1000);
+
+        bool upgraded = false;
+        s.LastServerInput ??= "";
+        s.LastFollowInput ??= "";
+        s.SavedPlaces.RemoveAll(p => p == null);
+        foreach (var place in s.SavedPlaces)
+        {
+            place.Server ??= "";
+            if (string.IsNullOrEmpty(place.Id)) { place.Id = Guid.NewGuid().ToString("N"); upgraded = true; }
+        }
+
+        s.LaunchPresets.RemoveAll(p => p == null);
+        foreach (var p in s.LaunchPresets)
+        {
+            p.Aliases ??= new();
+            p.JobId ??= "";
+            p.PrivateServerLink ??= "";
+            p.FollowUsername ??= "";
+            p.SavedPlaceId ??= "";
+            p.JoinDelaySeconds = Math.Clamp(p.JoinDelaySeconds, 0, 600);
+            p.RandomDelaySeconds = Math.Clamp(p.RandomDelaySeconds, 0, 600);
+            if (!PerformanceProfiles.IsKnown(p.PerformanceProfile)) p.PerformanceProfile = PerformanceProfiles.Normal;
+            upgraded |= p.NormalizeDestination();
+        }
+        return upgraded;
     }
 
     public static void Save()
@@ -195,9 +231,13 @@ public static class Paths
         catch
         {
             IsPortable = false;
-            return System.IO.Path.Combine(
+            string perUser = System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "RobloxAccountManager", "data");
+            // A data folder next to the exe that can't be written to: bring its contents along
+            // instead of starting empty (see DataFolderMigration — nothing is deleted).
+            DataFolderMigration.CopyIfNeeded(local, perUser);
+            return perUser;
         }
     }
 }

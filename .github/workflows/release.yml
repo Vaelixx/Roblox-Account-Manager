@@ -62,6 +62,10 @@ jobs:
         # same keys and placeholders — a broken {0} would otherwise only show up on a user's screen.
         run: python tools/check-localization.py
 
+      - name: Unit tests
+        shell: pwsh
+        run: dotnet test tests/RobloxAccountManager.Tests/RobloxAccountManager.Tests.csproj -c Release --nologo
+
       - name: Build (0 warnings required)
         shell: pwsh
         run: dotnet build src/RobloxAccountManager.csproj -c Release --nologo -warnaserror

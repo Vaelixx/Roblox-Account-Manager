@@ -60,9 +60,11 @@ The full list, including what to know before updating, is in the [changelog](CHA
 - Friends page: see what an account's friends are playing and join them
 
 **Automation**
-- Presets: launch a set of accounts into the same game with one click
+- Presets: launch a set of accounts into a game, a specific server, a private server or wherever a player is, with one click
+- Performance profiles: an Ultra-low AFK profile (low FPS cap, lowest graphics, optional minimize) per preset
 - Schedules: launch or close accounts at a time and on the days you pick, and close them again after a while
-- Anti-AFK, crash recovery with auto-rejoin, memory limits and memory trimming
+- Anti-AFK with optional random timing per client, crash recovery that rejoins the same destination,
+  a force-close threshold and memory trimming
 - Global hotkeys, a command line (`--launch`), a local HTTP API and plugins
 
 **Look and feel**
@@ -153,7 +155,8 @@ Turn it on under **Settings → Integrations**. Every request needs the token as
 | GET | `/ping` | Health check, no token needed |
 | GET | `/accounts` | Accounts with status and health (no cookies) |
 | GET | `/status?account=` | Presence of one account |
-| POST | `/launch?account=&placeId=&jobId=` | Launch an account |
+| POST | `/launch?account=&placeId=&jobId=` | Launch an account. Instead of `jobId`: `link=` (game, private-server or share link) or `followUserId=` |
+| POST | `/preset?name=` | Start a launch preset; answers right away while it runs |
 | POST | `/close?account=` | Close that account's clients |
 | GET | `/cookie?account=` | Only when **Allow reading cookies** is on |
 
@@ -174,6 +177,13 @@ dotnet run --project src/RobloxAccountManager.csproj
 dotnet publish src/RobloxAccountManager.csproj -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
+```
+
+Tests for the platform-independent logic (destinations, preset migration, Anti-AFK timing, profile
+undo, redaction) run anywhere .NET 8 does:
+
+```powershell
+dotnet test tests/RobloxAccountManager.Tests
 ```
 
 Debug builds have a demo mode that runs on a temporary folder with made-up accounts, so you can work

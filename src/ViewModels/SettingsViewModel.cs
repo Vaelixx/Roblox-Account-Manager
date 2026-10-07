@@ -108,6 +108,10 @@ public class SettingsViewModel : ObservableObject
         RestartElevatedCommand = new RelayCommand(_ => RestartElevated());
         RunHealthCheckCommand = new AsyncRelayCommand(RunHealthCheckAsync);
         OpenDiagnosticsCommand = new RelayCommand(_ => DiagnosticsService.OpenLogFolder());
+        CopyDiagnosticsCommand = new RelayCommand(_ =>
+        {
+            if (ClipboardService.CopyText(DiagnosticsService.BuildReport())) _main.SetStatus(L.T("Diagnostics.Copied"));
+        });
         ClearDiagnosticsCommand = new RelayCommand(_ =>
         {
             DiagnosticsService.Clear();
@@ -115,6 +119,7 @@ public class SettingsViewModel : ObservableObject
             _main.SetStatus(L.T("Diagnostics.Cleared"));
         });
         TestAntiAfkCommand = new RelayCommand(_ => TestAntiAfk());
+        TestBrowserCommand = new AsyncRelayCommand(_ => TestBrowserAsync());
         TrimRamCommand = new RelayCommand(_ => TrimRam());
         CheckForUpdatesCommand = new AsyncRelayCommand(() => _main.CheckForUpdateNowAsync());
         ShowWhatsNewCommand = new AsyncRelayCommand(() => _main.ShowWhatsNewAsync());
@@ -397,6 +402,17 @@ public class SettingsViewModel : ObservableObject
         }
     }
 
+    // Ultra-low AFK profile: every part can be switched off on its own.
+    private UltraLowOptions Afk => S.UltraLowAfk;
+    public int AfkProfileFpsCap { get => Afk.FpsCap; set { Afk.FpsCap = value <= 0 ? 0 : Math.Clamp(value, 5, 1000); Persist(); OnPropertyChanged(); } }
+    public bool AfkProfileMinimize { get => Afk.MinimizeWhenInGame; set { Afk.MinimizeWhenInGame = value; Persist(); OnPropertyChanged(); } }
+    public bool AfkLowestQuality { get => Afk.LowestQuality; set { Afk.LowestQuality = value; Persist(); OnPropertyChanged(); } }
+    public bool AfkNoAntiAliasing { get => Afk.NoAntiAliasing; set { Afk.NoAntiAliasing = value; Persist(); OnPropertyChanged(); } }
+    public bool AfkLowestTextures { get => Afk.LowestTextures; set { Afk.LowestTextures = value; Persist(); OnPropertyChanged(); } }
+    public bool AfkNoGrass { get => Afk.NoGrass; set { Afk.NoGrass = value; Persist(); OnPropertyChanged(); } }
+    public bool AfkGraySky { get => Afk.GraySky; set { Afk.GraySky = value; Persist(); OnPropertyChanged(); } }
+    public bool AfkFreezeLighting { get => Afk.FreezeLighting; set { Afk.FreezeLighting = value; Persist(); OnPropertyChanged(); } }
+
     public string FpsStatus
     {
         get
@@ -492,11 +508,28 @@ public class SettingsViewModel : ObservableObject
     // ================================================================ Automation
 
     public bool AntiAfkEnabled { get => S.AntiAfkEnabled; set { S.AntiAfkEnabled = value; Persist(); AntiAfkService.Apply(); OnPropertyChanged(); } }
-    public int AntiAfkIntervalMinutes { get => S.AntiAfkIntervalMinutes; set { S.AntiAfkIntervalMinutes = Math.Clamp(value, 1, 120); Persist(); AntiAfkService.Apply(); OnPropertyChanged(); } }
+    public int AntiAfkIntervalMinutes
+    {
+        get => S.AntiAfkIntervalMinutes;
+        set
+        {
+            S.AntiAfkIntervalMinutes = Math.Clamp(value, 1, 120);
+            S.AntiAfkIntervalMaxMinutes = Math.Max(S.AntiAfkIntervalMaxMinutes, S.AntiAfkIntervalMinutes);
+            Persist(); AntiAfkService.Apply(); OnPropertyChanged(); OnPropertyChanged(nameof(AntiAfkIntervalMaxMinutes));
+        }
+    }
+    public bool AntiAfkRandomize { get => S.AntiAfkRandomize; set { S.AntiAfkRandomize = value; Persist(); AntiAfkService.Apply(); OnPropertyChanged(); } }
+    public int AntiAfkIntervalMaxMinutes
+    {
+        get => S.AntiAfkIntervalMaxMinutes;
+        set { S.AntiAfkIntervalMaxMinutes = Math.Clamp(value, S.AntiAfkIntervalMinutes, 120); Persist(); AntiAfkService.Apply(); OnPropertyChanged(); }
+    }
     public IEnumerable<string> AntiAfkKeys => new[] { "Space", "Shift", "Ctrl", "W", "A", "S", "D", "0", "F13" };
     public string AntiAfkKey { get => S.AntiAfkKey; set { if (!string.IsNullOrEmpty(value)) { S.AntiAfkKey = value; Persist(); OnPropertyChanged(); } } }
     public bool AntiAfkRestoreFocus { get => S.AntiAfkRestoreFocus; set { S.AntiAfkRestoreFocus = value; Persist(); OnPropertyChanged(); } }
     public RelayCommand TestAntiAfkCommand { get; }
+    public RelayCommand CopyDiagnosticsCommand { get; }
+    public AsyncRelayCommand TestBrowserCommand { get; }
 
     private void TestAntiAfk()
     {
@@ -508,13 +541,17 @@ public class SettingsViewModel : ObservableObject
 
     public bool WatchdogEnabled { get => S.WatchdogEnabled; set { S.WatchdogEnabled = value; Persist(); WatchdogService.Apply(); OnPropertyChanged(); } }
     public int WatchdogCheckSeconds { get => S.WatchdogCheckSeconds; set { S.WatchdogCheckSeconds = Math.Clamp(value, 5, 600); Persist(); WatchdogService.Apply(); OnPropertyChanged(); } }
+    public bool RejoinOnDisconnect { get => S.RejoinOnDisconnect; set { S.RejoinOnDisconnect = value; Persist(); OnPropertyChanged(); } }
+    public int DisconnectMinutes { get => S.DisconnectMinutes; set { S.DisconnectMinutes = Math.Clamp(value, 2, 60); Persist(); OnPropertyChanged(); } }
+    public bool RestartClientsEnabled { get => S.RestartClientsEnabled; set { S.RestartClientsEnabled = value; Persist(); WatchdogService.Apply(); OnPropertyChanged(); } }
+    public int RestartClientsMinutes { get => S.RestartClientsMinutes; set { S.RestartClientsMinutes = Math.Clamp(value, 30, 24 * 60); Persist(); OnPropertyChanged(); } }
 
     public bool RamMonitorEnabled { get => S.RamMonitorEnabled; set { S.RamMonitorEnabled = value; Persist(); RamMonitorService.Apply(); OnPropertyChanged(); OnPropertyChanged(nameof(RamStatus)); } }
     public int RamMonitorSeconds { get => S.RamMonitorSeconds; set { S.RamMonitorSeconds = Math.Clamp(value, 2, 600); Persist(); RamMonitorService.Apply(); OnPropertyChanged(); } }
     public bool AutoCloseOnHighRam { get => S.AutoCloseOnHighRam; set { S.AutoCloseOnHighRam = value; Persist(); OnPropertyChanged(); } }
     public int RamLimitMb { get => S.RamLimitMb; set { S.RamLimitMb = Math.Clamp(value, 256, 65536); Persist(); OnPropertyChanged(); } }
     public bool AutoTrimEnabled { get => S.AutoTrimEnabled; set { S.AutoTrimEnabled = value; Persist(); RamMonitorService.ApplyAutoTrim(); OnPropertyChanged(); } }
-    public int AutoTrimMinutes { get => S.AutoTrimMinutes; set { S.AutoTrimMinutes = Math.Clamp(value, 1, 240); Persist(); RamMonitorService.ApplyAutoTrim(); OnPropertyChanged(); } }
+    public int AutoTrimMinutes { get => S.AutoTrimMinutes; set { S.AutoTrimMinutes = Math.Clamp(value, 5, 240); Persist(); RamMonitorService.ApplyAutoTrim(); OnPropertyChanged(); } }
     public RelayCommand TrimRamCommand { get; }
 
     private void TrimRam()
@@ -610,6 +647,17 @@ public class SettingsViewModel : ObservableObject
     {
         get => S.BrowserEngine;
         set { if (!string.IsNullOrEmpty(value)) { S.BrowserEngine = value; Persist(); OnPropertyChanged(); OnPropertyChanged(nameof(BrowserStatus)); } }
+    }
+
+    private string _browserTestStatus = "";
+    public string BrowserTestStatus { get => _browserTestStatus; private set => SetField(ref _browserTestStatus, value); }
+
+    private async Task TestBrowserAsync()
+    {
+        BrowserTestStatus = L.T("Browser.Test.Running");
+        var r = await BrowserService.TestAsync();
+        BrowserTestStatus = r.Message;
+        _main.SetStatus(r.Message);
     }
 
     public string BrowserStatus => BrowserService.Resolve() is { } b
@@ -1014,6 +1062,9 @@ public class SettingsViewModel : ObservableObject
 
     private bool _healthRunning;
     public bool HealthRunning { get => _healthRunning; private set => SetField(ref _healthRunning, value); }
+
+    /// <summary>The manager's own memory use, refreshed whenever Settings opens.</summary>
+    public string ManagerFootprint => DiagnosticsService.ManagerFootprint();
 
     public string DiagnosticsStatus
     {

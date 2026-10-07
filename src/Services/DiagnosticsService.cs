@@ -172,6 +172,73 @@ public static class DiagnosticsService
         catch { }
     }
 
+    /// <summary>
+    /// The manager's own footprint: working set, private memory, managed heap, handles, threads.
+    /// Shown in Settings → Diagnostics and in the report, so a slow leak shows up as a number that
+    /// keeps growing over a long session rather than as a vague "the PC got slow".
+    /// </summary>
+    public static string ManagerFootprint()
+    {
+        try
+        {
+            using var me = System.Diagnostics.Process.GetCurrentProcess();
+            const double Mb = 1024d * 1024d;
+            return string.Format(CultureInfo.InvariantCulture,
+                "{0:0} MB in RAM, {1:0} MB private, {2:0} MB managed heap, {3} handles, {4} threads, up {5:%d}d {5:hh}h {5:mm}m",
+                me.WorkingSet64 / Mb, me.PrivateMemorySize64 / Mb, GC.GetTotalMemory(false) / Mb,
+                me.HandleCount, me.Threads.Count, DateTime.Now - me.StartTime);
+        }
+        catch { return "unknown"; }
+    }
+
+    /// <summary>
+    /// A plain-text report to paste into a GitHub issue: versions, environment, which features are
+    /// switched on, and the recent log. Built from settings flags and counts only — never account
+    /// data — and run through <see cref="Redaction"/> as a whole. Account names that appear in log
+    /// lines stay, which is why the UI asks the user to look before posting.
+    /// </summary>
+    public static string BuildReport()
+    {
+        var sb = new StringBuilder();
+        try
+        {
+            var s = SettingsService.Current;
+            sb.AppendLine("Roblox Account Manager diagnostics");
+            sb.AppendLine($"Version: {AppInfo.Number}");
+            sb.AppendLine($"Windows: {Environment.OSVersion.VersionString}, {(Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit")}, .NET {Environment.Version}");
+            sb.AppendLine($"Language: {(s.Language.Length > 0 ? s.Language : "system")}, portable data folder: {Paths.IsPortable}");
+            sb.AppendLine($"Roblox: {Safe(RobloxInstallService.DescribeInstall) ?? "not found"}; launch links handled by: {Safe(RobloxInstallService.ProtocolOwner) ?? "unknown"}");
+            sb.AppendLine($"Browser: {Safe(() => BrowserService.Resolve()?.Engine) ?? "none found"} (setting: {s.BrowserEngine})");
+            sb.AppendLine($"Multi-instance: {s.EnableMultiInstance}, close singleton event: {s.CloseSingletonEvent}, mutex held: {RobloxSingletonService.MutexHeld}, access denied: {RobloxSingletonService.AccessDenied}");
+            sb.AppendLine($"Tracked clients: {InstanceControlService.Count}");
+            sb.AppendLine($"Manager: {ManagerFootprint()}");
+            sb.AppendLine($"Anti-AFK: {s.AntiAfkEnabled} ({s.AntiAfkIntervalMinutes}{(s.AntiAfkRandomize ? $"-{s.AntiAfkIntervalMaxMinutes}" : "")} min, key {s.AntiAfkKey})");
+            sb.AppendLine($"Watchdog: {s.WatchdogEnabled} (disconnects: {s.RejoinOnDisconnect} after {s.DisconnectMinutes} min, timed restart: {s.RestartClientsEnabled} every {s.RestartClientsMinutes} min); RAM monitor: {s.RamMonitorEnabled} (force-close: {s.AutoCloseOnHighRam} at {s.RamLimitMb} MB, auto-trim: {s.AutoTrimEnabled})");
+            sb.AppendLine($"FastFlags: {s.ApplyFFlags} ({s.CustomFFlags.Count} custom), FPS cap: {s.FpsCap}, AFK profile FPS: {s.UltraLowAfk.FpsCap}, profile in effect: {s.ProfileUndo != null}");
+            sb.AppendLine($"Local API: {s.WebApiEnabled}, plugins: {s.EnablePlugins}, proxy: {s.EnableProxy}, webhook: {!string.IsNullOrEmpty(s.DiscordWebhookUrl)}");
+            sb.AppendLine($"Presets: {s.LaunchPresets.Count} ({string.Join(", ", s.LaunchPresets.GroupBy(p => p.Destination).Select(g => $"{g.Key} {g.Count()}"))}), schedules: {s.ScheduledTasks.Count}");
+            sb.AppendLine();
+            sb.AppendLine("Recent log:");
+            foreach (string line in Recent(150)) sb.AppendLine(line);
+        }
+        catch (Exception ex) { sb.AppendLine($"(report incomplete: {ex.GetType().Name})"); }
+
+        string report = sb.ToString();
+        try
+        {
+            // Paths in the log carry the Windows user name.
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (home.Length > 3) report = report.Replace(home, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { }
+        return Redaction.Apply(report);
+
+        static string? Safe(Func<string?> read)
+        {
+            try { return read(); } catch { return null; }
+        }
+    }
+
     // ---------------------------------------------------------------
     //  Internals
     // ---------------------------------------------------------------
@@ -249,7 +316,7 @@ public static class DiagnosticsService
             // Redaction runs on the truncated text on purpose: the scan below costs O(n²) on a
             // long run of non-whitespace, and truncation can only ever cut a cookie's leading
             // warning header — the secret tail lives after it, so it is gone either way.
-            return CookieToken.Replace(sb.ToString(), RedactMatch);
+            return Redaction.Apply(CookieToken.Replace(sb.ToString(), RedactMatch));
         }
         catch { return ""; }   // never let sanitising be the thing that leaks or throws
     }

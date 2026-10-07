@@ -56,8 +56,11 @@
                     <StackPanel Orientation="Horizontal">
                         <Button Style="{StaticResource Btn.Ghost}" Content="{DynamicResource Str.Common.Clear}" Command="{Binding ClearDiagnosticsCommand}" />
                         <Button Style="{StaticResource Btn.Secondary}" Margin="8,0,0,0" Content="{DynamicResource Str.Common.OpenFolder}" Command="{Binding OpenDiagnosticsCommand}" />
+                        <Button Style="{StaticResource Btn.Secondary}" Margin="8,0,0,0" Content="{DynamicResource Str.Diagnostics.CopyReport}" Command="{Binding CopyDiagnosticsCommand}"
+                                ToolTip="{DynamicResource Str.Diagnostics.CopyReport.Desc}" />
                     </StackPanel>
                 </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Diagnostics.Manager.Title}" Description="{Binding ManagerFootprint}" />
                 <ctl:SettingItem Title="{DynamicResource Str.Diagnostics.Data.Title}" Description="{Binding DataFolder}">
                     <Button Style="{StaticResource Btn.Secondary}" Content="{DynamicResource Str.Common.OpenFolder}" Command="{Binding OpenDataFolderCommand}" />
                 </ctl:SettingItem>

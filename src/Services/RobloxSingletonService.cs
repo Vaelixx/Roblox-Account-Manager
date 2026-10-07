@@ -212,7 +212,9 @@ public static class RobloxSingletonService
         }
         finally
         {
-            _mutexOpen = false;
+            // Not "_mutexOpen = false" here: EnsureMutex(false) already cleared it, and a holder
+            // thread that is only now winding down would otherwise clear the flag of the new holder
+            // an immediate re-enable started — the status would then claim the mutex isn't held.
             if (owned) { try { mutex?.ReleaseMutex(); } catch { } }
             try { mutex?.Dispose(); } catch { }
             try { stop.Dispose(); } catch { }

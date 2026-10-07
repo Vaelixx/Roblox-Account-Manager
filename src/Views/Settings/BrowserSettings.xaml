@@ -15,6 +15,13 @@
                               SelectedValue="{Binding BrowserEngine}" />
                 </ctl:SettingItem>
                 <ctl:SettingItem Title="{DynamicResource Str.Browser.Current}" Description="{Binding BrowserStatus}" />
+                <ctl:SettingItem Title="{DynamicResource Str.Browser.Test.Title}" Description="{DynamicResource Str.Browser.Test.Desc}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding BrowserTestStatus}" Style="{StaticResource Text.Caption}" MaxWidth="320" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <Button Style="{StaticResource Btn.Secondary}" Content="{DynamicResource Str.Browser.Test.Run}" Command="{Binding TestBrowserCommand}" />
+                    </StackPanel>
+                </ctl:SettingItem>
             </ctl:DividerStack>
         </Border>
 

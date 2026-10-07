@@ -33,6 +33,14 @@
                         <TextBlock Text="{DynamicResource Str.Common.Unit.Minutes}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
                 </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.AntiAfk.Random}" Description="{DynamicResource Str.AntiAfk.Random.Desc}" IsEnabled="{Binding AntiAfkEnabled}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.AntiAfk.Random.UpTo}" Style="{StaticResource Text.Caption}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <TextBox Style="{StaticResource Input.Number}" Text="{Binding AntiAfkIntervalMaxMinutes}" IsEnabled="{Binding AntiAfkRandomize}" />
+                        <TextBlock Text="{DynamicResource Str.Common.Unit.Minutes}" Style="{StaticResource Text.Caption}" Margin="8,0,14,0" VerticalAlignment="Center" />
+                        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AntiAfkRandomize}" />
+                    </StackPanel>
+                </ctl:SettingItem>
                 <ctl:SettingItem Title="{DynamicResource Str.AntiAfk.Key}" Description="{DynamicResource Str.AntiAfk.Key.Desc}" IsEnabled="{Binding AntiAfkEnabled}">
                     <ComboBox Width="120" ItemsSource="{Binding AntiAfkKeys}" SelectedItem="{Binding AntiAfkKey}" />
                 </ctl:SettingItem>
@@ -55,6 +63,22 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBox Style="{StaticResource Input.Number}" Text="{Binding WatchdogCheckSeconds}" />
                         <TextBlock Text="{DynamicResource Str.Common.Unit.Seconds}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Watchdog.Disconnect.Title}" Description="{DynamicResource Str.Watchdog.Disconnect.Desc}" IsEnabled="{Binding WatchdogEnabled}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.Watchdog.Disconnect.After}" Style="{StaticResource Text.Caption}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <TextBox Style="{StaticResource Input.Number}" Text="{Binding DisconnectMinutes}" IsEnabled="{Binding RejoinOnDisconnect}" />
+                        <TextBlock Text="{DynamicResource Str.Common.Unit.Minutes}" Style="{StaticResource Text.Caption}" Margin="8,0,14,0" VerticalAlignment="Center" />
+                        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding RejoinOnDisconnect}" />
+                    </StackPanel>
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Watchdog.Restart.Title}" Description="{DynamicResource Str.Watchdog.Restart.Desc}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource Str.Watchdog.Restart.Every}" Style="{StaticResource Text.Caption}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <TextBox Style="{StaticResource Input.Number}" Text="{Binding RestartClientsMinutes}" IsEnabled="{Binding RestartClientsEnabled}" />
+                        <TextBlock Text="{DynamicResource Str.Common.Unit.Minutes}" Style="{StaticResource Text.Caption}" Margin="8,0,14,0" VerticalAlignment="Center" />
+                        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding RestartClientsEnabled}" />
                     </StackPanel>
                 </ctl:SettingItem>
             </ctl:DividerStack>

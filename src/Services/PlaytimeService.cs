@@ -76,9 +76,18 @@ public static class PlaytimeService
 
         Load();
         ProcessRegistry.Exited += OnClientExited;
-        _sweep = new System.Threading.Timer(
-            _ => { try { ProcessRegistry.Prune(); } catch { } },
-            null, SweepInterval, SweepInterval);
+        _sweep = new System.Threading.Timer(_ =>
+        {
+            try
+            {
+                ProcessRegistry.Prune();
+                // Running clients count toward the totals as they play, so the numbers have to move
+                // while they run, not only when one closes.
+                if (SettingsService.Current.TrackPlaytime && ProcessRegistry.All.Any(t => !t.IsExternal && t.UserId > 0))
+                    Changed?.Invoke();
+            }
+            catch { }
+        }, null, SweepInterval, SweepInterval);
     }
 
     /// <summary>
@@ -125,23 +134,46 @@ public static class PlaytimeService
         try { Changed?.Invoke(); } catch { }
     }
 
-    /// <summary>Totals for one account; never null.</summary>
+    /// <summary>Totals for one account from finished sessions; never null.</summary>
     public static PlaytimeSummary For(long userId)
     {
         lock (_gate)
             return _summaries.TryGetValue(userId, out var s) ? s : PlaytimeSummary.Empty;
     }
 
-    /// <summary>Combined playtime across every account in the last seven days.</summary>
-    public static TimeSpan Last7DaysTotal
+    /// <summary>
+    /// Time the account's running clients have been up so far. Sessions are only booked when a client
+    /// closes, so without this a week of AFK in one long session showed nothing until it ended.
+    /// Must not be called while holding <see cref="_gate"/>: reading the registry can book a session.
+    /// </summary>
+    private static Dictionary<long, TimeSpan> LiveByUser()
     {
-        get { lock (_gate) return _summaries.Values.Aggregate(TimeSpan.Zero, (a, s) => a + s.Last7Days); }
+        var live = new Dictionary<long, TimeSpan>();
+        if (!SettingsService.Current.TrackPlaytime) return live;
+        foreach (var t in ProcessRegistry.All)
+            if (!t.IsExternal && t.UserId > 0 && t.Uptime >= MinSession)
+                live[t.UserId] = live.GetValueOrDefault(t.UserId) + t.Uptime;
+        return live;
     }
 
-    /// <summary>Combined playtime across every account, all time.</summary>
+    /// <summary>Combined playtime across every account in the last seven days, running clients included.</summary>
+    public static TimeSpan Last7DaysTotal
+    {
+        get
+        {
+            var live = LiveByUser().Values.Aggregate(TimeSpan.Zero, (a, t) => a + t);
+            lock (_gate) return _summaries.Values.Aggregate(live, (a, s) => a + s.Last7Days);
+        }
+    }
+
+    /// <summary>Combined playtime across every account, all time, running clients included.</summary>
     public static TimeSpan AllTimeTotal
     {
-        get { lock (_gate) return _summaries.Values.Aggregate(TimeSpan.Zero, (a, s) => a + s.Total); }
+        get
+        {
+            var live = LiveByUser().Values.Aggregate(TimeSpan.Zero, (a, t) => a + t);
+            lock (_gate) return _summaries.Values.Aggregate(live, (a, s) => a + s.Total);
+        }
     }
 
     /// <summary>The most recent sessions, newest first — the Dashboard's recent-activity list.</summary>
@@ -176,15 +208,19 @@ public static class PlaytimeService
     /// </summary>
     public static void Apply(IEnumerable<Models.Account> accounts)
     {
+        var live = LiveByUser();
         foreach (var a in accounts)
         {
             var s = For(a.UserId);
-            a.PlaytimeTotalText = Format(s.Total);
-            a.Playtime7dText = Format(s.Last7Days);
-            a.LastPlayedText = s.LastPlayed is { } last
-                ? last.Date == DateTime.Today ? L.T("Time.TodayAt", last.ToString("t")) : last.ToString("g")
-                : L.T("Playtime.NeverPlayed");
-            a.HasPlaytime = s.Total > TimeSpan.Zero;
+            var running = live.GetValueOrDefault(a.UserId);
+            a.PlaytimeTotal = s.Total + running;   // the "Playtime" sort reads this; it was never set before
+            a.PlaytimeTotalText = Format(s.Total + running);
+            a.Playtime7dText = Format(s.Last7Days + running);
+            a.LastPlayedText = running > TimeSpan.Zero ? L.T("Playtime.PlayingNow")
+                : s.LastPlayed is { } last
+                    ? last.Date == DateTime.Today ? L.T("Time.TodayAt", last.ToString("t")) : last.ToString("g")
+                    : L.T("Playtime.NeverPlayed");
+            a.HasPlaytime = s.Total + running > TimeSpan.Zero;
         }
     }
 

@@ -48,19 +48,24 @@ public static class LauncherService
     {
         public bool Success { get; init; }
         public string Message { get; init; } = "";
-        public Task<ProcessRegistry.ProcessToken?>? AttributionTask { get; init; }
 
-        public static LaunchResult Ok(Task<ProcessRegistry.ProcessToken?>? attributionTask = null) => new()
-        {
-            Success = true,
-            Message = L.T("Launch.Launched"),
-            AttributionTask = attributionTask,
-        };
-        public static LaunchResult Fail(string m) => new() { Success = false, Message = m };
+        /// <summary>
+        /// False when trying again cannot help (locked, no cookie, rejected cookie, no protocol handler) —
+        /// the watchdog stops retrying a rejoin on those.
+        /// </summary>
+        public bool Retryable { get; init; } = true;
+
+        /// <summary>
+        /// Completes with the client this launch produced once it has been found (PID plus start time,
+        /// so a recycled PID can never be mistaken for it), or null when none appeared in time. The
+        /// launch itself is fire-and-forget (Roblox's protocol handler starts the client), so this is
+        /// the only signal that it actually came up.
+        /// </summary>
+        public Task<ProcessRegistry.ProcessToken?> Client { get; init; } = Task.FromResult<ProcessRegistry.ProcessToken?>(null);
+
+        public static LaunchResult Ok(Task<ProcessRegistry.ProcessToken?> client) => new() { Success = true, Message = L.T("Launch.Launched"), Client = client };
+        public static LaunchResult Fail(string m, bool retryable = true) => new() { Success = false, Message = m, Retryable = retryable };
     }
-
-    /// <summary>Everything that identifies where a launch should land.</summary>
-    public sealed record JoinTarget(long PlaceId, string? JobId = null, long FollowUserId = 0, string? LinkCode = null, string? AccessCode = null);
 
     /// <summary>
     /// Builds the placelauncherurl the client parses. The client reads the query parameters itself
@@ -92,16 +97,25 @@ public static class LauncherService
         string? privateLinkCode = null, string? accessCode = null)
         => LaunchAsync(acc, new JoinTarget(placeId, jobId, followUserId, privateLinkCode, accessCode));
 
-    public static async Task<LaunchResult> LaunchAsync(Account acc, JoinTarget target)
+    /// <param name="profile">Performance profile for this client (<see cref="PerformanceProfiles"/>); null/empty = normal.</param>
+    /// <param name="origin">Tag stored with the client (<see cref="ProcessRegistry.Tracked.Origin"/>); a relaunch passes it on.</param>
+    public static async Task<LaunchResult> LaunchAsync(Account acc, JoinTarget target, string? profile = null, string? origin = null)
     {
-        if (LockService.IsLocked) return LaunchResult.Fail(L.T("Lock.Blocked"));
-        if (string.IsNullOrEmpty(acc.Cookie)) return LaunchResult.Fail(L.T("Launch.NoCookie"));
+        if (LockService.IsLocked) return LaunchResult.Fail(L.T("Lock.Blocked"), retryable: false);
+        if (string.IsNullOrEmpty(acc.Cookie)) return LaunchResult.Fail(L.T("Launch.NoCookie"), retryable: false);
+        if (target.Kind != JoinKind.FollowUser && target.PlaceId <= 0) return LaunchResult.Fail(L.T("Launch.NeedPlace"), retryable: false);
 
         var settings = SettingsService.Current;
         EnsureMultiInstance(settings.EnableMultiInstance);
 
-        // Frame-rate cap, FastFlags and this account's own overrides, before the process starts.
-        try { FFlagsService.ApplyForLaunch(settings, acc); } catch { }
+        // Frame-rate cap, FastFlags, the profile and this account's own overrides, before the process starts.
+        try
+        {
+            bool hadUndo = settings.ProfileUndo != null || settings.FpsCapBeforeProfile != null;
+            FFlagsService.ApplyForLaunch(settings, acc, profile);
+            if (hadUndo || !string.IsNullOrEmpty(profile)) SettingsService.Save();
+        }
+        catch (Exception ex) { DiagnosticsService.Warn("launcher", "Could not apply graphics settings before launch", ex); }
 
         string tracker = EnsureTrackerId(acc);
 
@@ -115,7 +129,7 @@ public static class LauncherService
             {
                 acc.MarkValidated(false);
                 try { _store?.Save(); } catch { }
-                return LaunchResult.Fail(L.T("Launch.CookieExpired"));
+                return LaunchResult.Fail(L.T("Launch.CookieExpired"), retryable: false);
             }
             if (identity == null)
                 return LaunchResult.Fail(L.T("Launch.Unreachable", error));
@@ -162,19 +176,22 @@ public static class LauncherService
                 try { await PresenceService.PollNowAsync(); } catch { }
             });
 
-            Task<ProcessRegistry.ProcessToken?> attributionTask = Task.Run(() => AttributeClientAsync(acc, target.PlaceId, jobId, launchedAt));
+            // What presence said before this launch: a stale "in game" from the previous session must
+            // not count as this client having loaded (see MinimizeWhenInGameAsync).
+            string? gameBefore = acc.Presence == PresenceStatus.InGame ? acc.GameId ?? "" : null;
+            var client = Task.Run(() => AttributeClientAsync(acc, target, profile, launchedAt, gameBefore, origin));
 
             try { PluginService.RaiseLaunched(acc, target.PlaceId, jobId); } catch { }
             if (settings.ToastOnLaunch)
                 ToastService.Success(L.T("Toast.Launched.Title"), L.T("Toast.Launched.Body", acc.DisplayNameOrUser));
             if (settings.NotifyOnConnect && WebhookService.Configured)
                 WebhookService.Connected(acc, target.PlaceId, jobId);
-            AuditLogService.Log(AuditLogService.Category.Launch, $"Launched {acc.DisplayNameOrUser} into place {target.PlaceId}");
-            return LaunchResult.Ok(attributionTask);
+            AuditLogService.Log(AuditLogService.Category.Launch, $"Launched {acc.DisplayNameOrUser} into {target}");
+            return LaunchResult.Ok(client);
         }
         catch (Exception ex)
         {
-            return LaunchResult.Fail(ExplainLaunchFailure(ex));
+            return LaunchResult.Fail(ExplainLaunchFailure(ex), retryable: false);
         }
     }
 
@@ -183,7 +200,8 @@ public static class LauncherService
     /// a pending Roblox update, a slow disk) the client can take far longer than a few seconds to
     /// exist, and a single miss meant no Anti-AFK, crash watchdog or RAM cap for it.
     /// </summary>
-    private static async Task<ProcessRegistry.ProcessToken?> AttributeClientAsync(Account acc, long placeId, string? jobId, DateTime launchedAt)
+    private static async Task<ProcessRegistry.ProcessToken?> AttributeClientAsync(Account acc, JoinTarget target, string? profile,
+        DateTime launchedAt, string? gameBefore = null, string? origin = null)
     {
         await Task.Delay(4000);
 
@@ -192,16 +210,117 @@ public static class LauncherService
         {
             try
             {
-                int pid = ProcessRegistry.RegisterNewest(acc, placeId, jobId, launchedAt);
+                int pid = ProcessRegistry.RegisterNewest(acc, target, profile, launchedAt, origin);
                 if (pid != 0 && ProcessRegistry.TryGetToken(pid, out var resolved)) token = resolved;
             }
             catch { }
             if (token == null) await Task.Delay(2000);
         }
 
-        if (token is { } found) _lastProcess[acc.UserId] = found;
+        if (token is { } found)
+        {
+            _lastProcess[acc.UserId] = found;
+            if (PerformanceProfiles.Minimizes(profile, SettingsService.Current.UltraLowAfk))
+                _ = MinimizeWhenInGameAsync(acc, found, gameBefore);
+        }
         else DiagnosticsService.Warn("launcher", $"No client could be attributed to {acc.DisplayNameOrUser} within 34s of launch");
         return token;
+    }
+
+    /// <summary>
+    /// Minimizes a freshly launched client once it has joined its game. Roblox stops loading while
+    /// its window is minimized, so minimizing on the splash screen left the client stuck until someone
+    /// restored it. "Joined" is the account's presence turning In Game — a fresh value, not one left
+    /// over from the session before — plus a short settle. Without that signal (presence switched
+    /// off, or never reported within 5 minutes) the client is left as it is.
+    /// </summary>
+    /// <param name="gameBefore">Game id presence reported before the launch when it already said In Game; null otherwise.</param>
+    private static async Task MinimizeWhenInGameAsync(Account acc, ProcessRegistry.ProcessToken client, string? gameBefore)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(5);
+        DateTime? windowSince = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(3000);
+            if (!ProcessRegistry.All.Any(t => ProcessRegistry.TokenFor(t) == client)) return;   // closed meanwhile
+            if (ProcessRegistry.WindowHandle(client) == IntPtr.Zero) continue;                 // still starting
+            windowSince ??= DateTime.UtcNow;
+
+            if (acc.Presence != PresenceStatus.InGame) continue;
+            // In game already before the launch and still the same server: presence may simply not
+            // have caught up. Give loading a generous minute and a half instead of trusting it.
+            bool fresh = gameBefore == null || (acc.GameId ?? "") != gameBefore;
+            var settle = fresh ? TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(90);
+            if (DateTime.UtcNow - windowSince.Value < settle) continue;
+
+            InstanceControlService.Minimize(client);
+            return;
+        }
+        DiagnosticsService.Log("launcher", $"Left {acc.DisplayNameOrUser}'s client open: it never showed as in game (minimizing earlier stops Roblox loading)");
+    }
+
+    /// <summary>Options for <see cref="LaunchBatchAsync"/>. <c>Origin</c> tags every client the batch starts.</summary>
+    public sealed record BatchOptions(int DelaySeconds, int RandomDelaySeconds = 0, string? Profile = null, string? Origin = null);
+
+    /// <param name="NotStarted">Accounts skipped because the batch was stopped.</param>
+    public sealed record BatchResult(int Launched, int Failed, IReadOnlyList<string> Errors, int NotStarted = 0);
+
+    /// <summary>
+    /// Launches accounts one after another into the same target. Before the next account starts, the
+    /// previous client has to have appeared (or the attribution window run out) AND the delay has to
+    /// have passed — whichever takes longer. Waiting for the client keeps each launch's graphics
+    /// settings from being overwritten before that client has read them, and stops two clients that
+    /// start together from being attributed to each other. A failed account never stops the batch
+    /// or touches the ones that already launched.
+    /// </summary>
+    /// <param name="onLaunching">Account about to launch and its index (UI status).</param>
+    /// <param name="onWaiting">Seconds left before the next launch; -1 while only waiting for the client.</param>
+    /// <param name="ct">Stops the batch between accounts. Clients already launched keep running.</param>
+    public static async Task<BatchResult> LaunchBatchAsync(IReadOnlyList<Account> accounts, JoinTarget target, BatchOptions options,
+        Action<Account, int>? onLaunching = null, Action<int>? onWaiting = null, CancellationToken ct = default)
+    {
+        int launched = 0, attempted = 0;
+        var errors = new List<string>();
+
+        for (int i = 0; i < accounts.Count && !ct.IsCancellationRequested; i++)
+        {
+            var acc = accounts[i];
+            attempted++;
+            onLaunching?.Invoke(acc, i);
+
+            LaunchResult r;
+            try { r = await LaunchAsync(acc, target, options.Profile, options.Origin); }
+            catch (Exception ex)
+            {
+                DiagnosticsService.Warn("launcher", $"Launch of {acc.DisplayNameOrUser} threw", ex);
+                r = LaunchResult.Fail(L.T("Launch.Failed", ex.GetType().Name));
+            }
+            if (r.Success) launched++;
+            else errors.Add($"{acc.DisplayNameOrUser}: {r.Message}");
+
+            if (i == accounts.Count - 1) break;
+
+            int delay = Math.Max(0, options.DelaySeconds);
+            if (options.RandomDelaySeconds > 0) delay += Random.Shared.Next(options.RandomDelaySeconds + 1);
+
+            var waitForClient = r.Success ? r.Client : Task.FromResult<ProcessRegistry.ProcessToken?>(null);
+            try
+            {
+                for (int left = delay; left > 0; left--)
+                {
+                    onWaiting?.Invoke(left);
+                    await Task.Delay(1000, ct);
+                }
+                if (!waitForClient.IsCompleted)
+                {
+                    onWaiting?.Invoke(-1);
+                    await waitForClient.WaitAsync(ct);
+                }
+            }
+            catch (OperationCanceledException) { break; }
+        }
+
+        return new BatchResult(launched, attempted - launched, errors, accounts.Count - attempted);
     }
 
     /// <summary>
@@ -209,10 +328,17 @@ public static class LauncherService
     /// message ("The system cannot find the file specified") points at nothing; the cause is almost
     /// always a missing or hijacked protocol handler.
     /// </summary>
+    /// <remarks>
+    /// Never echoes <c>ex.Message</c>: Process.Start puts the file name in it, and here that is the
+    /// roblox-player: URI carrying the auth ticket and any private-server code. The message goes to the
+    /// status bar, toasts and the crash webhook.
+    /// </remarks>
     private static string ExplainLaunchFailure(Exception ex)
-        => ex is System.ComponentModel.Win32Exception or FileNotFoundException
-            ? L.T("Launch.NoHandler")
-            : L.T("Launch.Failed", ex.Message);
+    {
+        if (ex is System.ComponentModel.Win32Exception or FileNotFoundException) return L.T("Launch.NoHandler");
+        DiagnosticsService.Warn("launcher", $"Starting the Roblox client failed ({ex.GetType().Name})");
+        return L.T("Launch.Failed", ex.GetType().Name);
+    }
 
     /// <summary>Opens the Roblox app itself (home screen), signed in as this account — no game.</summary>
     public static async Task<LaunchResult> OpenRobloxAppAsync(Account acc)
@@ -249,10 +375,10 @@ public static class LauncherService
                 await Task.Delay(5000);
                 try { await PresenceService.PollNowAsync(); } catch { }
             });
-            Task<ProcessRegistry.ProcessToken?> attributionTask = Task.Run(() => AttributeClientAsync(acc, 0, null, launchedAt));
+            var client = Task.Run(() => AttributeClientAsync(acc, new JoinTarget(0), null, launchedAt));
             if (SettingsService.Current.ToastOnLaunch)
                 ToastService.Success(L.T("Toast.Launched.Title"), L.T("Toast.Launched.Body", acc.DisplayNameOrUser));
-            return LaunchResult.Ok(attributionTask);
+            return LaunchResult.Ok(client);
         }
         catch (Exception ex) { return LaunchResult.Fail(ExplainLaunchFailure(ex)); }
     }

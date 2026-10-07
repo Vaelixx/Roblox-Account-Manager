@@ -18,6 +18,40 @@
             </ctl:DividerStack>
         </Border>
 
+        <TextBlock Text="{DynamicResource Str.Profile.Section}" Style="{StaticResource Text.Section}" />
+        <Border Style="{StaticResource Panel}" Margin="0,0,0,24">
+            <ctl:DividerStack>
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.UltraLowAfk}" Description="{DynamicResource Str.Profile.UltraLowAfk.Desc}" />
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.Part.Quality}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AfkLowestQuality}" />
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.Part.Msaa}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AfkNoAntiAliasing}" />
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.Part.Textures}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AfkLowestTextures}" />
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.Part.Grass}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AfkNoGrass}" />
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.Part.Sky}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AfkGraySky}" />
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.Part.Lighting}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AfkFreezeLighting}" />
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.Fps.Title}" Description="{DynamicResource Str.Profile.Fps.Desc}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox Style="{StaticResource Input.Number}" Text="{Binding AfkProfileFpsCap}" />
+                        <TextBlock Text="FPS" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Profile.Minimize.Title}" Description="{DynamicResource Str.Profile.Minimize.Desc}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AfkProfileMinimize}" />
+                </ctl:SettingItem>
+            </ctl:DividerStack>
+        </Border>
+
         <Grid Margin="0,0,0,10">
             <TextBlock Text="{DynamicResource Str.Graphics.Flags}" Style="{StaticResource Text.Section}" Margin="2,0,0,0" VerticalAlignment="Center" />
             <TextBlock Text="{Binding FFlagsSummary}" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />

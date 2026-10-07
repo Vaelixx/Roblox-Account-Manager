@@ -42,22 +42,84 @@ public static class FFlagsService
     };
 
     /// <summary>
-    /// Everything a launch writes: the convenience options, the user's raw flags, then this account's
-    /// own overrides. Also applies the frame-rate cap to Roblox's settings file. Returns how many
-    /// flag files were written.
+    /// Everything a launch writes: the convenience options, the user's raw flags, the launch's
+    /// performance profile, then this account's own overrides. Also applies the frame-rate cap to
+    /// Roblox's settings file. Returns how many flag files were written.
     /// </summary>
-    public static int ApplyForLaunch(AppSettings s, Account? account = null)
+    /// <remarks>
+    /// Both files are shared by every client and read when a client starts, so a profile is undone by
+    /// the next launch that does not use it (<see cref="PerformanceProfiles.UndoEdits"/>). What that
+    /// needs is kept in <see cref="AppSettings.ProfileUndo"/>; the caller saves the settings.
+    /// </remarks>
+    public static int ApplyForLaunch(AppSettings s, Account? account = null, string? profile = null)
     {
-        if (s.FpsCap > 0)
-        {
-            try { RobloxClientSettingsService.WriteFramerateCap(s.FpsCap); } catch { }
-        }
+        ApplyFramerate(s, profile);
 
         var flags = s.ApplyFFlags ? BuildFlags(s) : new Dictionary<string, string>(StringComparer.Ordinal);
+        var profileFlags = PerformanceProfiles.Flags(profile, s.UltraLowAfk);
+        foreach (var kv in profileFlags)
+            flags[kv.Key] = kv.Value;
         foreach (var kv in ParseRaw(account?.FFlags))
             flags[kv.Key] = kv.Value;
 
-        return flags.Count == 0 ? 0 : Write(flags);
+        var undo = s.ProfileUndo;
+        if (flags.Count == 0 && (undo == null || undo.Written.Count == 0)) return 0;
+
+        // What this launch's profile leaves in the file (an account override can win over a profile flag).
+        var written = profileFlags.Keys.ToDictionary(k => k, k => flags[k], StringComparer.Ordinal);
+        var previous = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+        int count = Write(flags, (dir, file) =>
+        {
+            var oldPrevious = undo != null && undo.Previous.TryGetValue(dir, out var p) ? p : new Dictionary<string, string>();
+
+            // Remember what the profile overwrites, unless an earlier profile launch already did —
+            // then the file holds that profile's value and the original is the one already recorded.
+            var keep = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var key in written.Keys)
+            {
+                bool stillProfiles = undo != null && undo.Written.TryGetValue(key, out var w)
+                                     && file.TryGetValue(key, out var cur) && cur == w;
+                if (stillProfiles) { if (oldPrevious.TryGetValue(key, out var orig)) keep[key] = orig; }
+                else if (file.TryGetValue(key, out var existing)) keep[key] = existing;
+            }
+            if (keep.Count > 0) previous[dir] = keep;
+
+            if (undo != null)
+                foreach (var (key, value) in PerformanceProfiles.UndoEdits(undo.Written, oldPrevious, flags, file))
+                {
+                    if (value == null) file.Remove(key);
+                    else file[key] = value;
+                }
+        });
+
+        s.ProfileUndo = written.Count > 0 ? new ProfileUndoState { Written = written, Previous = previous } : null;
+        return count;
+    }
+
+    /// <summary>The profile's frame-rate cap, the user's own cap, or the cap from before a profile.</summary>
+    private static void ApplyFramerate(AppSettings s, string? profile)
+    {
+        try
+        {
+            int profileFps = PerformanceProfiles.FpsCap(profile, s.UltraLowAfk);
+            if (profileFps > 0)
+            {
+                s.FpsCapBeforeProfile ??= RobloxClientSettingsService.ReadFramerateCap() ?? 0;
+                RobloxClientSettingsService.WriteFramerateCap(profileFps);
+                s.FpsCapWrittenByProfile = profileFps;
+                return;
+            }
+
+            if (s.FpsCap > 0)
+                RobloxClientSettingsService.WriteFramerateCap(s.FpsCap);
+            else if (s.FpsCapBeforeProfile is int before && before != 0
+                     && RobloxClientSettingsService.ReadFramerateCap() == s.FpsCapWrittenByProfile)
+                RobloxClientSettingsService.WriteFramerateCap(before);   // unless the user changed it in game since
+            s.FpsCapBeforeProfile = null;
+            s.FpsCapWrittenByProfile = null;
+        }
+        catch (Exception ex) { DiagnosticsService.Warn("fflags", "Could not apply the frame-rate cap", ex); }
     }
 
     /// <summary>
@@ -110,7 +172,8 @@ public static class FFlagsService
     /// bootstrapper (Bloxstrap, Fishstrap…) that is its own managed file. Existing flags are merged,
     /// not replaced: a bootstrapper's file is the user's configuration.
     /// </summary>
-    private static int Write(Dictionary<string, string> flags)
+    /// <param name="adjust">Runs on each file's current flags before <paramref name="flags"/> are merged in.</param>
+    private static int Write(Dictionary<string, string> flags, Action<string, Dictionary<string, string>>? adjust = null)
     {
         int written = 0;
         foreach (var csDir in RobloxInstallService.FlagTargetDirectories())
@@ -124,6 +187,7 @@ public static class FFlagsService
                 if (File.Exists(file))
                     foreach (var kv in ParseRaw(File.ReadAllText(file)))
                         merged[kv.Key] = kv.Value;
+                adjust?.Invoke(csDir, merged);
                 foreach (var kv in flags) merged[kv.Key] = kv.Value;
 
                 string tmp = file + ".tmp";
@@ -142,6 +206,7 @@ public static class FFlagsService
     /// <summary>Removes ClientAppSettings.json from every flag target (revert to stock).</summary>
     public static int Clear()
     {
+        SettingsService.Current.ProfileUndo = null;   // nothing left to undo
         int cleared = 0;
         foreach (var csDir in RobloxInstallService.FlagTargetDirectories())
         {

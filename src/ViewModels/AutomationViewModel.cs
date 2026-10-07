@@ -55,24 +55,193 @@ public class PresetItem : ObservableObject
         get => Model.PlaceId > 0 ? Model.PlaceId.ToString() : "";
         set
         {
-            var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
-            Model.PlaceId = long.TryParse(digits, out long id) ? id : 0;
+            string text = (value ?? "").Trim();
+            if (JoinLinks.LooksLikeLink(text)) ApplyLink(text);
+            else Model.PlaceId = JoinLinks.ParsePlaceId(text);
+            RaiseDestination();
+            _owner.Persist();
+        }
+    }
+
+    /// <summary>
+    /// A pasted link decides the destination the same way the launch bar reads it: a private-server
+    /// or share link makes this a private-server preset, a link with a server id a specific-server one.
+    /// </summary>
+    private void ApplyLink(string link)
+    {
+        var parsed = JoinLinks.Parse(link);
+        if (parsed.PlaceId > 0) Model.PlaceId = parsed.PlaceId;
+        if (Model.Destination == JoinKind.FollowUser) return;
+
+        if (parsed.LinkCode != null || parsed.ShareCode != null)
+        {
+            Model.Destination = JoinKind.PrivateServer;
+            Model.PrivateServerLink = link;
+        }
+        else if (parsed.JobId != null)
+        {
+            Model.Destination = JoinKind.Server;
+            Model.JobId = parsed.JobId;
+        }
+        else if (Model.Destination == JoinKind.PrivateServer)
+        {
+            Model.PrivateServerLink = link;   // kept so the hint can say why it isn't a private-server link
+        }
+    }
+
+    /// <summary>Id of the saved place this preset uses instead of its own destination; "" = its own.</summary>
+    public string SavedPlaceId
+    {
+        get => Model.SavedPlaceId;
+        set
+        {
+            Model.SavedPlaceId = value ?? "";
             OnPropertyChanged();
+            OnPropertyChanged(nameof(UsesSaved));
             OnPropertyChanged(nameof(Summary));
             _owner.Persist();
         }
     }
 
-    public string JobId
+    public bool UsesSaved => Model.SavedPlaceId.Length > 0;
+
+    private SavedPlace? Saved => UsesSaved ? SettingsService.Current.SavedPlaces.FirstOrDefault(p => p.Id == Model.SavedPlaceId) : null;
+
+    /// <summary>"Place", "Server", "PrivateServer" or "FollowUser" — bound to the segmented picker.</summary>
+    public string Destination
     {
-        get => Model.JobId;
-        set { Model.JobId = (value ?? "").Trim(); OnPropertyChanged(); _owner.Persist(); }
+        get => Model.Destination.ToString();
+        set
+        {
+            if (!Enum.TryParse<JoinKind>(value, out var kind) || kind == Model.Destination) return;
+            Model.Destination = kind;
+            RaiseDestination();
+            _owner.Persist();
+        }
+    }
+
+    public bool ShowPlace => Model.Destination != JoinKind.FollowUser;
+    public bool ShowTarget => Model.Destination != JoinKind.Place;
+
+    public string TargetLabel => Model.Destination switch
+    {
+        JoinKind.PrivateServer => L.T("Automation.PrivateLink"),
+        JoinKind.FollowUser => L.T("Automation.JoinUser"),
+        _ => L.T("Automation.Server"),
+    };
+
+    /// <summary>The Job ID, the private-server link or the player, depending on <see cref="Destination"/>.</summary>
+    public string TargetText
+    {
+        get => Model.Destination switch
+        {
+            JoinKind.Server => Model.JobId,
+            JoinKind.PrivateServer => Model.PrivateServerLink,
+            JoinKind.FollowUser => Model.FollowUsername,
+            _ => "",
+        };
+        set
+        {
+            string text = (value ?? "").Trim();
+            switch (Model.Destination)
+            {
+                case JoinKind.Server when JoinLinks.LooksLikeLink(text):
+                case JoinKind.PrivateServer when text.Length > 0:
+                    ApplyLink(text);
+                    break;
+                case JoinKind.PrivateServer:
+                    Model.PrivateServerLink = "";
+                    break;
+                case JoinKind.Server:
+                    Model.JobId = text;
+                    break;
+                case JoinKind.FollowUser:
+                    string user = text.TrimStart('@');
+                    if (user == Model.FollowUsername) return;
+                    Model.FollowUsername = user;
+                    Model.FollowUserId = 0;
+                    _ = ResolveFollowAsync(user);
+                    break;
+                default:
+                    return;
+            }
+            RaiseDestination();
+            _owner.Persist();
+        }
+    }
+
+    private string? _followHint;
+
+    /// <summary>Looks the player up once while editing, so the preset launches by id and a typo shows now, not at 3 am.</summary>
+    private async Task ResolveFollowAsync(string user)
+    {
+        if (user.Length == 0) { _followHint = null; RaiseDestination(); return; }
+        _followHint = L.T("Follow.LookingUp", user);
+        OnPropertyChanged(nameof(TargetHint));
+        long id = await JoinTargetResolver.ResolveUserIdAsync(user);
+        if (Model.FollowUsername != user) return;   // edited again meanwhile
+        Model.FollowUserId = id;
+        _followHint = id > 0 ? L.T("Automation.Preset.FollowFound", user, id) : L.T("Follow.NotFound", user);
+        RaiseDestination();
+        _owner.Persist();
+    }
+
+    /// <summary>Feedback under the destination box: what was understood, or why it won't work.</summary>
+    public string TargetHint
+    {
+        get
+        {
+            switch (Model.Destination)
+            {
+                case JoinKind.Server:
+                    return Model.JobId.Length > 0 && !JoinLinks.LooksLikeJobId(Model.JobId) ? L.T("Launch.BadJobId") : "";
+                case JoinKind.PrivateServer:
+                    if (Model.PrivateServerLink.Length == 0) return L.T("Automation.Preset.PasteLink");
+                    var parsed = JoinLinks.Parse(Model.PrivateServerLink);
+                    if (parsed.LinkCode == null && parsed.ShareCode == null) return L.T("Automation.Preset.NeedLink");
+                    return parsed.LinkCode != null && Model.PlaceId <= 0 ? L.T("Launch.NeedPlace") : "";
+                case JoinKind.FollowUser:
+                    return _followHint ?? (Model.FollowUserId > 0 ? L.T("Automation.Preset.FollowFound", Model.FollowUsername, Model.FollowUserId) : "");
+                default:
+                    return "";
+            }
+        }
+    }
+
+    private void RaiseDestination()
+    {
+        OnPropertyChanged(nameof(PlaceIdText));
+        OnPropertyChanged(nameof(Destination));
+        OnPropertyChanged(nameof(ShowPlace));
+        OnPropertyChanged(nameof(ShowTarget));
+        OnPropertyChanged(nameof(TargetLabel));
+        OnPropertyChanged(nameof(TargetText));
+        OnPropertyChanged(nameof(TargetHint));
+        OnPropertyChanged(nameof(Summary));
     }
 
     public int JoinDelaySeconds
     {
         get => Model.JoinDelaySeconds;
         set { Model.JoinDelaySeconds = Math.Clamp(value, 0, 600); OnPropertyChanged(); _owner.Persist(); }
+    }
+
+    public int RandomDelaySeconds
+    {
+        get => Model.RandomDelaySeconds;
+        set { Model.RandomDelaySeconds = Math.Clamp(value, 0, 600); OnPropertyChanged(); _owner.Persist(); }
+    }
+
+    public IReadOnlyList<Choice> Profiles => new[]
+    {
+        new Choice(PerformanceProfiles.Normal, L.T("Profile.Normal")),
+        new Choice(PerformanceProfiles.UltraLowAfk, L.T("Profile.UltraLowAfk")),
+    };
+
+    public string Profile
+    {
+        get => Model.PerformanceProfile;
+        set { Model.PerformanceProfile = PerformanceProfiles.IsKnown(value) ? value ?? "" : ""; OnPropertyChanged(); _owner.Persist(); }
     }
 
     public ObservableCollection<PresetMember> Members { get; } = new();
@@ -101,9 +270,13 @@ public class PresetItem : ObservableObject
         => string.Equals(a.Username, key, StringComparison.OrdinalIgnoreCase)
         || (a.Alias.Length > 0 && string.Equals(a.Alias, key, StringComparison.OrdinalIgnoreCase));
 
-    public string Summary => Model.PlaceId > 0
-        ? L.N("Automation.Preset.Summary", Model.Aliases.Count, Model.PlaceId)
-        : L.N("Automation.Preset.SummaryNoPlace", Model.Aliases.Count);
+    public string Summary => UsesSaved
+        ? L.N("Automation.Preset.SummarySaved", Model.Aliases.Count, Saved?.Name ?? L.T("Automation.Saved.Gone"))
+        : Model.Destination == JoinKind.FollowUser
+        ? L.N("Automation.Preset.SummaryFollow", Model.Aliases.Count, Model.FollowUsername)
+        : Model.PlaceId > 0
+            ? L.N("Automation.Preset.Summary", Model.Aliases.Count, Model.PlaceId)
+            : L.N("Automation.Preset.SummaryNoPlace", Model.Aliases.Count);
 
     public void RaiseAll() => OnPropertyChanged(string.Empty);
 }
@@ -206,8 +379,7 @@ public class ScheduleItem : ObservableObject
         get => Model.PlaceId > 0 ? Model.PlaceId.ToString() : "";
         set
         {
-            var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
-            Model.PlaceId = long.TryParse(digits, out long id) ? id : 0;
+            Model.PlaceId = JoinLinks.ParsePlaceId(value);
             OnPropertyChanged();
             _owner.Persist();
         }
@@ -318,6 +490,7 @@ public class AutomationViewModel : ObservableObject
         AddPresetCommand = new RelayCommand(_ => AddPreset());
         DeletePresetCommand = new RelayCommand(p => DeletePreset(p as PresetItem ?? SelectedPreset));
         RunPresetCommand = new AsyncRelayCommand(p => RunPresetAsync(p as PresetItem ?? SelectedPreset));
+        StopPresetCommand = new RelayCommand(_ => { try { _presetCts?.Cancel(); } catch (ObjectDisposedException) { } });
         AddScheduleCommand = new RelayCommand(_ => AddSchedule());
         DeleteScheduleCommand = new RelayCommand(p => DeleteSchedule(p as ScheduleItem ?? SelectedSchedule));
         RunScheduleNowCommand = new AsyncRelayCommand(p => RunScheduleAsync(p as ScheduleItem ?? SelectedSchedule));
@@ -335,12 +508,20 @@ public class AutomationViewModel : ObservableObject
     public ObservableCollection<ScheduleItem> Schedules { get; } = new();
     public IEnumerable<string> PresetNames => Presets.Select(p => p.Name).ToList();
 
+    /// <summary>The launch bar's saved places, for a preset's "Saved place" picker. First entry = none.</summary>
+    public IReadOnlyList<Choice> SavedPlaceChoices =>
+        new[] { new Choice("", L.T("Automation.Saved.None")) }
+            .Concat(SettingsService.Current.SavedPlaces.Select(p => new Choice(p.Id, p.Name)))
+            .ToList();
+
     private string _section = "Presets";
     public string Section { get => _section; set => SetField(ref _section, value ?? "Presets"); }
 
     /// <summary>Opens the first preset and schedule so the editor isn't empty on the first visit.</summary>
     public void OnShown()
     {
+        OnPropertyChanged(nameof(SavedPlaceChoices));   // saved from the launch bar meanwhile
+        foreach (var p in Presets) p.RaiseAll();
         SelectedPreset ??= Presets.FirstOrDefault();
         SelectedSchedule ??= Schedules.FirstOrDefault();
     }
@@ -369,6 +550,7 @@ public class AutomationViewModel : ObservableObject
     public RelayCommand AddPresetCommand { get; }
     public RelayCommand DeletePresetCommand { get; }
     public AsyncRelayCommand RunPresetCommand { get; }
+    public RelayCommand StopPresetCommand { get; }
     public RelayCommand AddScheduleCommand { get; }
     public RelayCommand DeleteScheduleCommand { get; }
     public AsyncRelayCommand RunScheduleNowCommand { get; }
@@ -425,16 +607,54 @@ public class AutomationViewModel : ObservableObject
         OnPropertyChanged(nameof(PresetNames));
     }
 
+    private CancellationTokenSource? _presetCts;
+    private bool _presetRunning;
+    public bool IsPresetRunning { get => _presetRunning; private set => SetField(ref _presetRunning, value); }
+
     private async Task RunPresetAsync(PresetItem? item)
     {
         if (item == null) return;
+        if (_presetRunning) { _main.SetStatus(L.T("Automation.Preset.AlreadyRunning")); return; }
         SettingsService.Save();
         if (item.Model.Aliases.Count == 0) { _main.SetStatus(L.T("Automation.Preset.NoAccounts")); return; }
-        if (item.Model.PlaceId <= 0) { _main.SetStatus(L.T("Launch.NeedPlace")); return; }
+        if (!RequirementsService.IsRobloxInstalled())
+        {
+            DialogService.OfferDownload(L.T("Requirements.NoRoblox.Title"), L.T("Requirements.NoRoblox.Body"), "https://www.roblox.com/download");
+            return;
+        }
+
+        IsPresetRunning = true;
+        _presetCts = new CancellationTokenSource();
         _main.SetStatus(L.T("Automation.Preset.Running", item.Name));
-        var (launched, failed) = await PresetService.LaunchAsync(item.Model);
-        _main.SetStatus(L.T("Automation.Preset.Done", item.Name, launched, failed));
-        if (failed > 0) ToastService.Warning(item.Name, L.T("Automation.Preset.Done", item.Name, launched, failed));
+        PresetService.RunResult r;
+        try
+        {
+            r = await PresetService.LaunchAsync(item.Model,
+                onLaunching: (a, i) => _main.SetStatus(L.T("Launch.LaunchingOf", a.DisplayNameOrUser, i + 1, item.Model.Aliases.Count)),
+                onWaiting: left => _main.SetStatus(left > 0 ? L.T("Launch.NextIn", left) : L.T("Automation.Preset.Running", item.Name)),
+                ct: _presetCts.Token);
+        }
+        finally
+        {
+            _presetCts.Dispose();
+            _presetCts = null;
+            IsPresetRunning = false;
+        }
+
+        if (r.NotStarted > 0)
+        {
+            _main.SetStatus(L.T("Launch.Stopped", r.Launched, r.NotStarted));
+            return;
+        }
+        if (r.Error != null)
+        {
+            _main.SetStatus(r.Error);
+            ToastService.Warning(item.Name, r.Error);
+            return;
+        }
+        string done = L.T("Automation.Preset.Done", item.Name, r.Launched, r.Failed);
+        _main.SetStatus(done);
+        if (r.Failed > 0) ToastService.Warning(done, string.Join("\n", r.Errors.Take(3)));
     }
 
     private void AddSchedule()

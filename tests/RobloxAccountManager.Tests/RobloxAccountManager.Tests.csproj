@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Plain net8.0 so the tests run anywhere (CI, a Mac, Linux). They cover the logic that has no
+       WPF or Win32 dependency, compiled straight from the app's source files rather than through a
+       reference to the net8.0-windows app, which could only run on Windows. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>RobloxAccountManager.Tests</RootNamespace>
+    <!-- Crypto.cs calls DPAPI, which is Windows-only. The tests never rely on it succeeding: on other
+         platforms the protected-string converter fails closed and writes an empty value. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Models\JoinTarget.cs" Link="App\JoinTarget.cs" />
+    <Compile Include="..\..\src\Models\LaunchPreset.cs" Link="App\LaunchPreset.cs" />
+    <Compile Include="..\..\src\Services\AfkSchedule.cs" Link="App\AfkSchedule.cs" />
+    <Compile Include="..\..\src\Services\BrowserLiveness.cs" Link="App\BrowserLiveness.cs" />
+    <Compile Include="..\..\src\Services\Crypto.cs" Link="App\Crypto.cs" />
+    <Compile Include="..\..\src\Services\DataFolderMigration.cs" Link="App\DataFolderMigration.cs" />
+    <Compile Include="..\..\src\Services\PerformanceProfiles.cs" Link="App\PerformanceProfiles.cs" />
+    <Compile Include="..\..\src\Services\ProtectedStringConverter.cs" Link="App\ProtectedStringConverter.cs" />
+    <Compile Include="..\..\src\Services\Redaction.cs" Link="App\Redaction.cs" />
+    <Compile Include="..\..\src\Services\RejoinBackoff.cs" Link="App\RejoinBackoff.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+</Project>

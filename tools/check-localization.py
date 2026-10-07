@@ -75,8 +75,9 @@ prefixes = {k.split('.')[0] for k in xaml_keys | direct | plural_bases}
 literal_keys = set()
 for text in cs_text.values():
     for key in re.findall(r'"([A-Z][A-Za-z0-9]*(?:\.[A-Za-z0-9_]+)+)"', text):
-        # file names ("Updater.exe") end in a lower-case extension; keys never do
-        if key.split('.')[0] in prefixes and not re.search(r'\.[a-z]+$', key):
+        # file names ("Updater.exe") end in a lower-case extension and DevTools methods
+        # ("Browser.getVersion") have a lower-case segment; key segments are always capitalised
+        if key.split('.')[0] in prefixes and not re.search(r'\.[a-z]', key):
             literal_keys.add(key)
 
 

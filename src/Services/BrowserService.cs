@@ -141,12 +141,27 @@ public static class BrowserService
             args.Add("--window-size=1280,860");
             args.Add("about:blank");
 
-            var proc = Start(browser, args);
-            WipeOnExit(proc, profileDir);
+            Process? proc;
+            try { proc = Start(browser, args); }
+            catch (Exception ex)
+            {
+                DiagnosticsService.Warn("browser", $"{browser.Engine} could not be started", ex);
+                WipeProfileWithRetry(profileDir);
+                return new(false, L.T("Browser.LaunchFailed", browser.Engine, ex.Message));
+            }
 
             string? wsUrl = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(20));
             if (wsUrl == null)
+            {
+                await CloseBrowserAsync(port, proc);
+                proc?.Dispose();
+                WipeProfileWithRetry(profileDir);
                 return new(false, L.T("Browser.DebuggerTimeout", browser.Engine));
+            }
+
+            // The profile must never outlive its window. Watched through DevTools, not the launcher
+            // process: that one may exit at once while the window stays open.
+            _ = CleanupWhenClosedAsync(port, proc, profileDir);
 
             await InjectCookieAndNavigateAsync(wsUrl, acc.Cookie, injectJs);
             return new(true, string.IsNullOrWhiteSpace(injectJs)
@@ -183,15 +198,21 @@ public static class BrowserService
         string profileDir = NewProfileDir("login");
         Process? proc = null;
         ClientWebSocket? socket = null;
+        int port = 0;
 
         try
         {
-            int port = FreePort();
+            port = FreePort();
             var args = BaseArguments(profileDir, port);
             args.Add("--window-size=520,820");
             args.Add("--app=https://www.roblox.com/login");
-            proc = Start(browser, args);
-            progress?.Report(L.T("Browser.Login.Opening"));
+            progress?.Report(L.T("Browser.Login.Opening", browser.Engine));
+            try { proc = Start(browser, args); }
+            catch (Exception ex)
+            {
+                DiagnosticsService.Warn("browser", $"{browser.Engine} could not be started for sign-in", ex);
+                return new(false, L.T("Browser.LaunchFailed", browser.Engine, ex.Message), null);
+            }
 
             // The browser-level endpoint survives every navigation the login flow performs.
             string? wsUrl = await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(20)).ConfigureAwait(false);
@@ -202,46 +223,70 @@ public static class BrowserService
                 pageTarget = wsUrl != null;
             }
             if (wsUrl == null)
+            {
+                // A launcher that exited with an error never produced a browser; one that exited
+                // cleanly may have handed off to a browser that just isn't answering.
+                if (proc is { HasExited: true } && proc.ExitCode != 0)
+                    return new(false, L.T("Browser.LaunchFailed", browser.Engine, $"exit code {proc.ExitCode}"), null);
                 return new(false, L.T("Browser.DebuggerTimeout", browser.Engine), null);
+            }
 
-            socket = new ClientWebSocket();
-            await socket.ConnectAsync(new Uri(wsUrl), ct).ConfigureAwait(false);
+            socket = await ConnectAsync(wsUrl, ct).ConfigureAwait(false);
 
             int id = 0;
             string method = pageTarget ? "Network.getAllCookies" : "Storage.getCookies";
             if (pageTarget) (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
 
-            progress?.Report(L.T("Browser.Login.Waiting"));
+            progress?.Report(L.T("Browser.Login.Waiting", browser.Engine));
 
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            var liveness = new BrowserLiveness();
             var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(15);
             while (DateTime.UtcNow < deadline)
             {
                 ct.ThrowIfCancellationRequested();
 
-                if (proc != null && proc.HasExited)
+                // Session liveness comes from DevTools, never from the process Start() returned.
+                var (reachable, pages) = await ProbeAsync(http, port).ConfigureAwait(false);
+                if (liveness.Observe(reachable, pages))
                     return new(false, L.T("Browser.Login.Closed"), null);
 
-                var (cookie, unsupported) = await TryReadSessionCookieAsync(socket, ++id, method, ct).ConfigureAwait(false);
-                if (cookie != null)
+                if (reachable && socket is not { State: WebSocketState.Open })
                 {
-                    progress?.Report(L.T("Browser.Login.Captured"));
-                    return new(true, "", cookie);
+                    // The DevTools connection dropped while the browser is still there: reconnect.
+                    try { socket?.Dispose(); } catch { }
+                    socket = null;
+                    string? again = pageTarget
+                        ? await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(5)).ConfigureAwait(false)
+                        : await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                    if (again == null) { await Task.Delay(1000, ct).ConfigureAwait(false); continue; }
+                    socket = await ConnectAsync(again, ct).ConfigureAwait(false);
+                    if (pageTarget) (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
                 }
 
-                // Some builds do not expose Storage.getCookies on the browser target; switch to a
-                // page target's Network domain once and keep polling.
-                if (unsupported && !pageTarget)
+                if (socket is { State: WebSocketState.Open })
                 {
-                    string? pageWs = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-                    if (pageWs == null) return new(false, L.T("Browser.DebuggerTimeout", browser.Engine), null);
+                    var (cookie, unsupported) = await TryReadSessionCookieAsync(socket, ++id, method, ct).ConfigureAwait(false);
+                    if (cookie != null)
+                    {
+                        progress?.Report(L.T("Browser.Login.Captured"));
+                        return new(true, "", cookie);
+                    }
 
-                    try { socket.Dispose(); } catch { }
-                    socket = new ClientWebSocket();
-                    await socket.ConnectAsync(new Uri(pageWs), ct).ConfigureAwait(false);
-                    pageTarget = true;
-                    method = "Network.getAllCookies";
-                    (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
-                    continue;
+                    // Some builds do not expose Storage.getCookies on the browser target; switch to a
+                    // page target's Network domain once and keep polling.
+                    if (unsupported && !pageTarget)
+                    {
+                        string? pageWs = await WaitForPageSocketAsync(port, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                        if (pageWs == null) return new(false, L.T("Browser.DebuggerTimeout", browser.Engine), null);
+
+                        try { socket.Dispose(); } catch { }
+                        socket = await ConnectAsync(pageWs, ct).ConfigureAwait(false);
+                        pageTarget = true;
+                        method = "Network.getAllCookies";
+                        (await CallAsync(socket, ++id, "Network.enable", new { }, ct).ConfigureAwait(false))?.Dispose();
+                        continue;
+                    }
                 }
 
                 await Task.Delay(1000, ct).ConfigureAwait(false);
@@ -261,8 +306,121 @@ public static class BrowserService
         finally
         {
             try { socket?.Dispose(); } catch { }
-            try { if (proc is { HasExited: false }) proc.Kill(entireProcessTree: true); } catch { }
+            if (port > 0) await CloseBrowserAsync(port, proc).ConfigureAwait(false);
             try { proc?.Dispose(); } catch { }
+            WipeProfileWithRetry(profileDir);
+        }
+    }
+
+    /// <summary>
+    /// Starts a hidden browser once, checks it answers over DevTools and closes it again — the same
+    /// path sign-in uses, without opening a window. Reports which browser and version answered.
+    /// </summary>
+    public static async Task<OpenResult> TestAsync()
+    {
+        var browser = Resolve();
+        if (browser == null) return new(false, L.T("Browser.NoneFound"), NoBrowser: true);
+
+        string profileDir = NewProfileDir("test");
+        Process? proc = null;
+        int port = FreePort();
+        try
+        {
+            var args = BaseArguments(profileDir, port);
+            args.Add("--headless=new");
+            args.Add("about:blank");
+            try { proc = Start(browser, args); }
+            catch (Exception ex) { return new(false, L.T("Browser.LaunchFailed", browser.Engine, ex.Message)); }
+
+            string? wsUrl = await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(20));
+            if (wsUrl == null) return new(false, L.T("Browser.DebuggerTimeout", browser.Engine));
+
+            using var socket = await ConnectAsync(wsUrl, CancellationToken.None);
+            using var reply = await CallAsync(socket, 1, "Browser.getVersion", new { }, CancellationToken.None);
+            string product = reply != null && reply.RootElement.TryGetProperty("result", out var r)
+                             && r.TryGetProperty("product", out var pr) ? pr.GetString() ?? "" : "";
+            return product.Length > 0
+                ? new(true, L.T("Browser.Test.Ok", browser.Engine, product))
+                : new(false, L.T("Browser.DebuggerTimeout", browser.Engine));
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.Warn("browser", "Browser test failed", ex);
+            return new(false, L.T("Browser.OpenFailed", ex.Message));
+        }
+        finally
+        {
+            await CloseBrowserAsync(port, proc);
+            try { proc?.Dispose(); } catch { }
+            WipeProfileWithRetry(profileDir);
+        }
+    }
+
+    private static async Task<ClientWebSocket> ConnectAsync(string wsUrl, CancellationToken ct)
+    {
+        var socket = new ClientWebSocket();
+        try { await socket.ConnectAsync(new Uri(wsUrl), ct).ConfigureAwait(false); }
+        catch { socket.Dispose(); throw; }
+        return socket;
+    }
+
+    /// <summary>Whether the DevTools endpoint answers, and how many page (window/tab) targets it lists.</summary>
+    private static async Task<(bool reachable, int pages)> ProbeAsync(HttpClient http, int port)
+    {
+        try
+        {
+            string json = await http.GetStringAsync($"http://127.0.0.1:{port}/json/list").ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+            int pages = doc.RootElement.ValueKind == JsonValueKind.Array
+                ? doc.RootElement.EnumerateArray().Count(t => t.TryGetProperty("type", out var ty) && ty.GetString() is "page" or "app")
+                : 0;
+            return (true, pages);
+        }
+        catch { return (false, 0); }
+    }
+
+    /// <summary>
+    /// Ends a browser session the manager started: asks the browser itself to close over DevTools
+    /// (that reaches the real browser process even when the launcher handed off and exited, and one
+    /// left running in the background), then kills the launcher's process tree as a fallback.
+    /// </summary>
+    private static async Task CloseBrowserAsync(int port, Process? launcher)
+    {
+        try
+        {
+            string? ws = await WaitForBrowserSocketAsync(port, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            if (ws != null)
+            {
+                using var socket = await ConnectAsync(ws, CancellationToken.None).ConfigureAwait(false);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                (await CallAsync(socket, 1, "Browser.close", new { }, cts.Token).ConfigureAwait(false))?.Dispose();
+            }
+        }
+        catch { /* already gone, or closed before it could answer */ }
+
+        try { if (launcher is { HasExited: false }) launcher.Kill(entireProcessTree: true); }
+        catch (Exception ex) { DiagnosticsService.Warn("browser", "Could not stop the browser process", ex); }
+    }
+
+    /// <summary>Waits until a signed-in window is closed, then shuts that browser down and wipes its profile.</summary>
+    private static async Task CleanupWhenClosedAsync(int port, Process? launcher, string profileDir)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            var liveness = new BrowserLiveness();
+            while (true)
+            {
+                await Task.Delay(2000).ConfigureAwait(false);
+                var (reachable, pages) = await ProbeAsync(http, port).ConfigureAwait(false);
+                if (liveness.Observe(reachable, pages)) break;
+            }
+            await CloseBrowserAsync(port, launcher).ConfigureAwait(false);
+        }
+        catch (Exception ex) { DiagnosticsService.Warn("browser", "Watching a browser window failed", ex); }
+        finally
+        {
+            try { launcher?.Dispose(); } catch { }
             WipeProfileWithRetry(profileDir);
         }
     }
@@ -325,18 +483,6 @@ public static class BrowserService
         return dir;
     }
 
-    /// <summary>The profile must never outlive its window: wipe the folder as soon as the browser exits.</summary>
-    private static void WipeOnExit(Process? proc, string profileDir)
-    {
-        if (proc == null) return;
-        try
-        {
-            proc.EnableRaisingEvents = true;
-            proc.Exited += (_, _) => { WipeProfileWithRetry(profileDir); proc.Dispose(); };
-        }
-        catch { /* startup and exit sweeps still cover it */ }
-    }
-
     /// <summary>
     /// Deletes leftover browser profiles under data/browser. Runs at start and exit so no site data
     /// from a previous session stays on disk. A profile whose browser is still open is locked; it is
@@ -361,7 +507,8 @@ public static class BrowserService
     {
         _ = Task.Run(async () =>
         {
-            for (int attempt = 0; attempt < 10; attempt++)
+            // Up to ~10 s: a browser asked to close can take a few seconds to release its files.
+            for (int attempt = 0; attempt < 20; attempt++)
             {
                 try
                 {

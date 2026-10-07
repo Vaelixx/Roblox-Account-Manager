@@ -260,7 +260,7 @@ public partial class AddAccountDialog : Window
         SetWorking(true);
         CancelBtn.IsEnabled = true;          // Cancel stops the wait instead of closing the dialog
         CancelBtn.Content = L.T("Common.Stop");
-        ShowStatus(L.T("Browser.Login.Opening"), Tone.Busy);
+        ShowStatus(L.T("Browser.Login.Opening", BrowserService.Resolve()?.Engine ?? "Chromium"), Tone.Busy);
 
         _browserCts = new CancellationTokenSource();
         var progress = new Progress<string>(text => { if (_working) ShowStatus(text, Tone.Busy); });

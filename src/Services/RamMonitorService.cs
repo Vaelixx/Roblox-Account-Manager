@@ -155,7 +155,7 @@ public static class RamMonitorService
             var s = SettingsService.Current;
             if (!s.RamMonitorEnabled || !s.AutoTrimEnabled) return;
 
-            var period = TimeSpan.FromMinutes(Math.Clamp(s.AutoTrimMinutes, 1, 240));
+            var period = TimeSpan.FromMinutes(Math.Clamp(s.AutoTrimMinutes, 5, 240));
             _trimTimer = new System.Threading.Timer(
                 _ => { try { TrimAll(); } catch { } },   // a throwing timer callback kills the process
                 null, period, period);

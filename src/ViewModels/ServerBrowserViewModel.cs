@@ -116,17 +116,7 @@ public class ServerBrowserViewModel : ObservableObject
         OnPropertyChanged(nameof(Summary));
     }
 
-    private static long ParsePlace(string text)
-    {
-        text = text.Trim();
-        if (text.Contains("roblox", StringComparison.OrdinalIgnoreCase))
-        {
-            var parsed = RobloxApi.ParseJoinLink(text);
-            if (parsed.PlaceId > 0) return parsed.PlaceId;
-        }
-        var digits = new string(text.Where(char.IsDigit).ToArray());
-        return digits.Length is > 0 and <= 18 && long.TryParse(digits, out long id) ? id : 0;
-    }
+    private static long ParsePlace(string text) => JoinLinks.ParsePlaceId(text);
 
     public async Task RefreshAsync()
     {

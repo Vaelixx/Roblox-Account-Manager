@@ -119,35 +119,84 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0">
                                 <Button Style="{StaticResource Btn.Primary}" ctl:Ui.Icon="{StaticResource Icon.Play}" Height="38"
                                         Content="{DynamicResource Str.Automation.RunNow}"
-                                        Command="{Binding DataContext.RunPresetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                        Command="{Binding DataContext.RunPresetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                        Visibility="{Binding DataContext.IsPresetRunning, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}" />
+                                <Button Style="{StaticResource Btn.Secondary}" ctl:Ui.Icon="{StaticResource Icon.Stop}" Height="38" Foreground="{DynamicResource DangerBrush}"
+                                        Content="{DynamicResource Str.Launch.Stop}" ToolTip="{DynamicResource Str.Launch.Stop.Tip}"
+                                        Command="{Binding DataContext.StopPresetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        Visibility="{Binding DataContext.IsPresetRunning, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
                                 <Button Style="{StaticResource Btn.Icon}" Width="38" Height="38" Margin="6,0,0,0" ctl:Ui.Icon="{StaticResource Icon.Trash}"
                                         ToolTip="{DynamicResource Str.Common.Delete}"
                                         Command="{Binding DataContext.DeletePresetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
                             </StackPanel>
                         </Grid>
 
-                        <Grid Grid.Row="1" Margin="0,18,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="140" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="{DynamicResource Str.Automation.Place}" Style="{StaticResource Text.Label}" />
-                                <TextBox Text="{Binding PlaceIdText, UpdateSourceTrigger=LostFocus}" ctl:Ui.Icon="{StaticResource Icon.Gamepad}" ctl:Ui.Placeholder="Place ID" />
+                        <StackPanel Grid.Row="1" Margin="0,18,0,0">
+                            <TextBlock Text="{DynamicResource Str.Automation.Saved}" Style="{StaticResource Text.Label}" />
+                            <ComboBox HorizontalAlignment="Left" MinWidth="280" DisplayMemberPath="Label" SelectedValuePath="Value"
+                                      ItemsSource="{Binding DataContext.SavedPlaceChoices, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                      SelectedValue="{Binding SavedPlaceId}" ToolTip="{DynamicResource Str.Automation.Saved.Desc}" />
+                            <TextBlock Text="{DynamicResource Str.Automation.Saved.Using}" Style="{StaticResource Text.Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding UsesSaved, Converter={StaticResource BoolToVis}}" />
+
+                            <StackPanel Margin="0,14,0,0" Visibility="{Binding UsesSaved, Converter={StaticResource InverseBoolToVis}}">
+                            <TextBlock Text="{DynamicResource Str.Automation.Destination}" Style="{StaticResource Text.Label}" />
+                            <Border Style="{StaticResource Segmented}" HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton GroupName="presetDest" Style="{StaticResource Segment}" Content="{DynamicResource Str.Automation.Dest.Place}"
+                                                 IsChecked="{Binding Destination, Converter={StaticResource EqualsToBool}, ConverterParameter=Place}" />
+                                    <RadioButton GroupName="presetDest" Style="{StaticResource Segment}" Content="{DynamicResource Str.Automation.Dest.Server}"
+                                                 IsChecked="{Binding Destination, Converter={StaticResource EqualsToBool}, ConverterParameter=Server}" />
+                                    <RadioButton GroupName="presetDest" Style="{StaticResource Segment}" Content="{DynamicResource Str.Automation.Dest.Private}"
+                                                 IsChecked="{Binding Destination, Converter={StaticResource EqualsToBool}, ConverterParameter=PrivateServer}" />
+                                    <RadioButton GroupName="presetDest" Style="{StaticResource Segment}" Content="{DynamicResource Str.Automation.Dest.Follow}"
+                                                 IsChecked="{Binding Destination, Converter={StaticResource EqualsToBool}, ConverterParameter=FollowUser}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="2*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Visibility="{Binding ShowPlace, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{DynamicResource Str.Automation.Place}" Style="{StaticResource Text.Label}" />
+                                    <TextBox Text="{Binding PlaceIdText, UpdateSourceTrigger=LostFocus}" ctl:Ui.Icon="{StaticResource Icon.Gamepad}" ctl:Ui.Placeholder="Place ID" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Visibility="{Binding ShowTarget, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding TargetLabel}" Style="{StaticResource Text.Label}" />
+                                    <TextBox Text="{Binding TargetText, UpdateSourceTrigger=LostFocus}" ctl:Ui.Icon="{StaticResource Icon.Link}" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="{Binding TargetHint}" Style="{StaticResource Text.Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding TargetHint, Converter={StaticResource NullToVis}}" />
                             </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="{DynamicResource Str.Automation.Server}" Style="{StaticResource Text.Label}" />
-                                <TextBox Text="{Binding JobId, UpdateSourceTrigger=LostFocus}" ctl:Ui.Icon="{StaticResource Icon.Link}"
-                                         ctl:Ui.Placeholder="{DynamicResource Str.Common.Optional}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="4">
-                                <TextBlock Text="{DynamicResource Str.Automation.Delay}" Style="{StaticResource Text.Label}" />
-                                <TextBox Text="{Binding JoinDelaySeconds, UpdateSourceTrigger=LostFocus}" ctl:Ui.Icon="{StaticResource Icon.Timer}" />
-                            </StackPanel>
-                        </Grid>
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="140" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{DynamicResource Str.Automation.Profile}" Style="{StaticResource Text.Label}" />
+                                    <ComboBox ItemsSource="{Binding Profiles}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Profile}"
+                                              ToolTip="{DynamicResource Str.Automation.Profile.Desc}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{DynamicResource Str.Automation.Delay}" Style="{StaticResource Text.Label}" />
+                                    <TextBox Text="{Binding JoinDelaySeconds, UpdateSourceTrigger=LostFocus}" ctl:Ui.Icon="{StaticResource Icon.Timer}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="{DynamicResource Str.Automation.RandomDelay}" Style="{StaticResource Text.Label}" />
+                                    <TextBox Text="{Binding RandomDelaySeconds, UpdateSourceTrigger=LostFocus}" ctl:Ui.Icon="{StaticResource Icon.Timer}"
+                                             ToolTip="{DynamicResource Str.Automation.RandomDelay.Desc}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
 
                         <Grid Grid.Row="2" Margin="0,18,0,0">
                             <Grid.RowDefinitions>

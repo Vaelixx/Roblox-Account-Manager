@@ -65,6 +65,9 @@ public class AccountsViewModel : ObservableObject
         };
 
         PlaceIdText = SettingsService.Current.DefaultPlaceId > 0 ? SettingsService.Current.DefaultPlaceId.ToString() : "";
+        // The server box and the player box keep what was last launched with, like the place does.
+        JobIdText = SettingsService.Current.LastServerInput;
+        FollowText = SettingsService.Current.LastFollowInput;
         foreach (var p in SettingsService.Current.SavedPlaces) SavedPlaces.Add(p);
 
         AddCommand = new AsyncRelayCommand(_ => AddAsync(0));
@@ -75,6 +78,7 @@ public class AccountsViewModel : ObservableObject
         RefreshAllCommand = new AsyncRelayCommand(RefreshAllAsync);
 
         LaunchCommand = new AsyncRelayCommand(_ => LaunchAsync());
+        StopLaunchCommand = new RelayCommand(_ => { try { _launchCts?.Cancel(); } catch (ObjectDisposedException) { } });
         ShuffleJoinCommand = new AsyncRelayCommand(_ => ShuffleJoinAsync());
         PingJoinCommand = new AsyncRelayCommand(_ => PingJoinAsync());
         ServerHopCommand = new AsyncRelayCommand(_ => ServerHopAsync());
@@ -436,6 +440,12 @@ public class AccountsViewModel : ObservableObject
 
     private bool _busy;
     public bool Busy { get => _busy; set => SetField(ref _busy, value); }
+
+    // A running batch launch, so it can be stopped between accounts.
+    private CancellationTokenSource? _launchCts;
+    private bool _isLaunching;
+    public bool IsLaunching { get => _isLaunching; private set => SetField(ref _isLaunching, value); }
+    public RelayCommand StopLaunchCommand { get; }
 
     // ================================================================ add / import / export
 
@@ -856,17 +866,7 @@ public class AccountsViewModel : ObservableObject
     private CancellationTokenSource? _placeLookupCts;
 
     /// <summary>A pasted game link fills the Place ID; digits are extracted from anything else.</summary>
-    private long ParsePlaceId(string text)
-    {
-        text = (text ?? "").Trim();
-        if (text.Contains("roblox.com", StringComparison.OrdinalIgnoreCase) || text.StartsWith("roblox:", StringComparison.OrdinalIgnoreCase))
-        {
-            var parsed = RobloxApi.ParseJoinLink(text);
-            if (parsed.PlaceId > 0) return parsed.PlaceId;
-        }
-        var digits = new string(text.Where(char.IsDigit).ToArray());
-        return digits.Length is > 0 and <= 18 && long.TryParse(digits, out long id) ? id : 0;
-    }
+    private static long ParsePlaceId(string text) => JoinLinks.ParsePlaceId(text);
 
     private void LookupPlaceDebounced()
     {
@@ -955,50 +955,37 @@ public class AccountsViewModel : ObservableObject
     /// Turns the Place ID and the Job ID / link boxes into a launch target: a plain game, a specific
     /// server (Job ID), a private server (classic link code or modern share link), or a deep link.
     /// </summary>
-    private async Task<LauncherService.JoinTarget?> ResolveJoinTargetAsync(List<Account> sel)
+    private async Task<JoinTarget?> ResolveJoinTargetAsync(List<Account> sel)
     {
         string input = JobIdText.Trim();
         long placeId = ParsePlaceId(PlaceIdText);
+        bool isLink = JoinLinks.LooksLikeLink(input);
 
-        if (input.Length > 0 && (input.Contains("roblox.com", StringComparison.OrdinalIgnoreCase)
-                                 || input.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-                                 || input.StartsWith("roblox:", StringComparison.OrdinalIgnoreCase)))
+        // Without a link the place comes from the box, and a valid one is remembered as the default.
+        if (!isLink && !TryPlaceId(out placeId)) return null;
+        if (isLink && JoinLinks.Parse(input).ShareCode != null) _main.SetStatus(L.T("Launch.ResolvingLink"));
+
+        var result = await JoinTargetResolver.FromServerInputAsync(input, placeId,
+            () => sel.FirstOrDefault(a => a.IsValid)?.Cookie ?? _store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie ?? "");
+        if (result.Target != null)
         {
-            var parsed = RobloxApi.ParseJoinLink(input);
-            long pid = parsed.PlaceId > 0 ? parsed.PlaceId : placeId;
-
-            if (!string.IsNullOrEmpty(parsed.LinkCode) && pid > 0)
-                return new LauncherService.JoinTarget(pid, LinkCode: parsed.LinkCode);
-
-            if (!string.IsNullOrEmpty(parsed.ShareCode))
-            {
-                _main.SetStatus(L.T("Launch.ResolvingLink"));
-                string cookie = sel.FirstOrDefault(a => a.IsValid)?.Cookie
-                                ?? _store.Accounts.FirstOrDefault(a => a.IsValid)?.Cookie ?? "";
-                var res = await RobloxApi.ResolveShareLinkAsync(cookie, parsed.ShareCode);
-                if (res == null)
-                {
-                    _main.SetStatus(L.T("Launch.LinkInvalid"));
-                    ToastService.Error(L.T("Launch.FailedTitle"), L.T("Launch.LinkInvalid"));
-                    return null;
-                }
-                return new LauncherService.JoinTarget(res.PlaceId, LinkCode: res.LinkCode);
-            }
-
-            if (pid > 0) return new LauncherService.JoinTarget(pid, JobId: parsed.JobId);
-
-            _main.SetStatus(L.T("Launch.LinkNoPlace"));
-            return null;
+            RememberInput(input, null);
+            return result.Target;
         }
 
-        if (!TryPlaceId(out placeId)) return null;
-        if (input.Length > 0 && !RobloxApi.LooksLikeJobId(input))
-        {
-            _main.SetStatus(L.T("Launch.BadJobId"));
-            ToastService.Warning(L.T("Launch.BadJobIdTitle"), L.T("Launch.BadJobId"));
-            return null;
-        }
-        return new LauncherService.JoinTarget(placeId, JobId: input.Length > 0 ? input : null);
+        _main.SetStatus(result.Error ?? "");
+        if (result.ErrorTitle != null) ToastService.Warning(result.ErrorTitle, result.Error ?? "");
+        return null;
+    }
+
+    /// <summary>Keeps the launch bar's server / player box for next time (the place box is remembered in <see cref="TryPlaceId"/>).</summary>
+    private static void RememberInput(string? server, string? follow)
+    {
+        var s = SettingsService.Current;
+        bool changed = false;
+        if (server != null && s.LastServerInput != server) { s.LastServerInput = server; changed = true; }
+        if (follow != null && s.LastFollowInput != follow) { s.LastFollowInput = follow; changed = true; }
+        if (changed) SettingsService.Save();
     }
 
     private async Task ShuffleJoinAsync()
@@ -1009,7 +996,7 @@ public class AccountsViewModel : ObservableObject
         var s = SettingsService.Current;
         string job = await RobloxApi.GetRandomJobIdAsync(placeId, s.ShuffleLowestServer, s.ShufflePageCount);
         if (string.IsNullOrEmpty(job)) { _main.SetStatus(L.T("Servers.NoneJoinable")); return; }
-        await LaunchSequential(sel, new LauncherService.JoinTarget(placeId, job));
+        await LaunchSequential(sel, new JoinTarget(placeId, job));
     }
 
     private string? _lastHopJobId;
@@ -1022,7 +1009,7 @@ public class AccountsViewModel : ObservableObject
         var pick = await PowerToolsService.PickBestPingAsync(placeId);
         if (pick.JobId == null) { _main.SetStatus(pick.Error ?? L.T("Servers.NoneJoinable")); return; }
         _lastHopJobId = pick.JobId;
-        await LaunchSequential(sel, new LauncherService.JoinTarget(placeId, pick.JobId));
+        await LaunchSequential(sel, new JoinTarget(placeId, pick.JobId));
     }
 
     private async Task ServerHopAsync()
@@ -1034,7 +1021,7 @@ public class AccountsViewModel : ObservableObject
         var pick = await PowerToolsService.PickHopAsync(placeId, exclude);
         if (pick.JobId == null) { _main.SetStatus(pick.Error ?? L.T("Servers.NoneJoinable")); return; }
         _lastHopJobId = pick.JobId;
-        await LaunchSequential(sel, new LauncherService.JoinTarget(placeId, pick.JobId));
+        await LaunchSequential(sel, new JoinTarget(placeId, pick.JobId));
     }
 
     private async Task SquadJoinAsync()
@@ -1046,7 +1033,7 @@ public class AccountsViewModel : ObservableObject
         if (pick.JobId == null) { _main.SetStatus(pick.Error ?? L.T("Servers.NoneJoinable")); return; }
         if (pick.Warning != null) ToastService.Warning(L.T("Launch.SquadTitle"), pick.Warning);
         _lastHopJobId = pick.JobId;
-        await LaunchSequential(sel, new LauncherService.JoinTarget(placeId, pick.JobId));
+        await LaunchSequential(sel, new JoinTarget(placeId, pick.JobId));
     }
 
     private async Task FollowAsync()
@@ -1056,9 +1043,10 @@ public class AccountsViewModel : ObservableObject
         string user = FollowText.Trim().TrimStart('@');
         if (string.IsNullOrEmpty(user)) { _main.SetStatus(L.T("Follow.EnterUser")); return; }
         _main.SetStatus(L.T("Follow.LookingUp", user));
-        long id = long.TryParse(user, out long numeric) && numeric > 0 ? numeric : await RobloxApi.GetUserIdAsync(user);
+        long id = await JoinTargetResolver.ResolveUserIdAsync(user);
         if (id <= 0) { _main.SetStatus(L.T("Follow.NotFound", user)); ToastService.Error(L.T("Launch.FailedTitle"), L.T("Follow.NotFound", user)); return; }
-        await LaunchSequential(sel, new LauncherService.JoinTarget(0, FollowUserId: id));
+        RememberInput(null, FollowText.Trim());
+        await LaunchSequential(sel, new JoinTarget(0, FollowUserId: id));
     }
 
     private void BrowseServers()
@@ -1067,7 +1055,7 @@ public class AccountsViewModel : ObservableObject
         _main.OpenServersFor(placeId);
     }
 
-    private async Task LaunchSequential(List<Account> accounts, LauncherService.JoinTarget target)
+    private async Task LaunchSequential(List<Account> accounts, JoinTarget target)
     {
         if (!RequirementsService.IsRobloxInstalled())
         {
@@ -1076,48 +1064,49 @@ public class AccountsViewModel : ObservableObject
         }
 
         Busy = true;
-        int delay = Math.Max(0, SettingsService.Current.AccountJoinDelay);
-        int ok = 0;
-        var errors = new List<string>();
+        IsLaunching = true;
+        _launchCts = new CancellationTokenSource();
+        Account? current = null;
+        LauncherService.BatchResult result;
         try
         {
-            for (int i = 0; i < accounts.Count; i++)
-            {
-                var a = accounts[i];
-                a.IsBusy = true;
-                _main.SetStatus(accounts.Count == 1
-                    ? L.T("Launch.Launching", a.DisplayNameOrUser)
-                    : L.T("Launch.LaunchingOf", a.DisplayNameOrUser, i + 1, accounts.Count));
-                var r = await LauncherService.LaunchAsync(a, target);
-                a.IsBusy = false;
-                if (r.Success) ok++;
-                else errors.Add($"{a.DisplayNameOrUser}: {r.Message}");
-
-                if (i < accounts.Count - 1 && delay > 0)
+            result = await LauncherService.LaunchBatchAsync(accounts, target,
+                new LauncherService.BatchOptions(SettingsService.Current.AccountJoinDelay),
+                onLaunching: (a, i) =>
                 {
-                    for (int s = delay; s > 0; s--)
-                    {
-                        _main.SetStatus(L.T("Launch.NextIn", s));
-                        await Task.Delay(1000);
-                    }
-                }
-            }
+                    if (current != null) current.IsBusy = false;
+                    current = a;
+                    a.IsBusy = true;
+                    _main.SetStatus(accounts.Count == 1
+                        ? L.T("Launch.Launching", a.DisplayNameOrUser)
+                        : L.T("Launch.LaunchingOf", a.DisplayNameOrUser, i + 1, accounts.Count));
+                },
+                onWaiting: left =>
+                {
+                    if (current != null) current.IsBusy = false;
+                    _main.SetStatus(left > 0 ? L.T("Launch.NextIn", left) : L.T("Launch.WaitingForClient", current?.DisplayNameOrUser ?? ""));
+                }, _launchCts.Token);
             _store.Save();
         }
         finally
         {
             foreach (var a in accounts) a.IsBusy = false;
+            _launchCts.Dispose();
+            _launchCts = null;
+            IsLaunching = false;
             Busy = false;
         }
 
-        if (errors.Count > 0)
+        if (result.NotStarted > 0)
+            _main.SetStatus(L.T("Launch.Stopped", result.Launched, result.NotStarted));
+        else if (result.Errors.Count > 0)
         {
-            _main.SetStatus(errors[0]);
-            ToastService.Error(L.T("Launch.FailedTitle"), string.Join("\n", errors.Take(3)));
+            _main.SetStatus(result.Launched > 0 ? L.T("Launch.DoneMixed", result.Launched, result.Failed) : result.Errors[0]);
+            ToastService.Error(L.T("Launch.FailedTitle"), string.Join("\n", result.Errors.Take(3)));
         }
         else
         {
-            _main.SetStatus(L.N("Launch.Done", ok));
+            _main.SetStatus(L.N("Launch.Done", result.Launched));
         }
     }
 
@@ -1141,9 +1130,18 @@ public class AccountsViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(name)) return;
         name = name.Trim();
 
+        // Saving under an existing name replaces it but keeps its id, so presets using it follow along.
         var existing = SavedPlaces.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existing != null) SavedPlaces.Remove(existing);
-        SavedPlaces.Add(new SavedPlace { Name = name, PlaceId = placeId, IconUrl = GameIcon, UniverseId = _lastUniverseId });
+        SavedPlaces.Add(new SavedPlace
+        {
+            Id = existing?.Id is { Length: > 0 } id ? id : Guid.NewGuid().ToString("N"),
+            Name = name,
+            PlaceId = placeId,
+            Server = JobIdText.Trim(),
+            IconUrl = GameIcon,
+            UniverseId = _lastUniverseId,
+        });
 
         PersistSavedPlaces();
         _ = LoadSavedPlaceIconsAsync();
@@ -1162,7 +1160,7 @@ public class AccountsViewModel : ObservableObject
         if (place == null) return;
         SavedPlacesOpen = false;
         PlaceIdText = place.PlaceId.ToString();
-        JobIdText = "";
+        JobIdText = place.Server;
     }
 
     private bool _loadingIcons;

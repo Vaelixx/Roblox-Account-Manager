@@ -109,21 +109,27 @@ public static class SchedulerService
             }
 
             // ---- Launch ----
-            var attributionTasks = new List<Task<ProcessRegistry.ProcessToken?>>();
-
             if (LockService.IsLocked)
             {
                 DiagnosticsService.Warn("scheduler", $"Skipped task '{task.Name}': the manager is locked");
                 return;
             }
 
+            // Every client this run starts carries the tag, and so does a client the watchdog relaunches
+            // in place of one of them. The auto-close below closes exactly those: never a client the user
+            // started by hand, before or after the task fired.
+            string origin = $"schedule:{task.Name}:{Guid.NewGuid():N}";
+            int launched = 0;
+
             if (!string.IsNullOrWhiteSpace(task.PresetName))
             {
                 var preset = PresetService.Find(task.PresetName);
                 if (preset != null)
                 {
-                    var result = await PresetService.LaunchTrackedAsync(preset);
-                    attributionTasks.AddRange(result.AttributionTasks);
+                    var r = await PresetService.LaunchAsync(preset, origin: origin);
+                    launched = r.Launched;
+                    if (r.Error != null || r.Failed > 0)
+                        DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': {r.Launched} launched, {r.Failed} failed{(r.Error != null ? " — " + r.Error : "")}");
                 }
                 else DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': preset '{task.PresetName}' no longer exists");
             }
@@ -132,49 +138,57 @@ public static class SchedulerService
                 var acc = _resolve?.Invoke(task.Alias);
                 if (acc != null && task.PlaceId > 0)
                 {
-                    var result = await LauncherService.LaunchAsync(acc, task.PlaceId);
-                    if (result.Success && result.AttributionTask != null)
-                        attributionTasks.Add(result.AttributionTask);
+                    var result = await LauncherService.LaunchAsync(acc, new JoinTarget(task.PlaceId), origin: origin);
+                    if (result.Success) launched++;
+                    else DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': {result.Message}");
                 }
                 else DiagnosticsService.Warn("scheduler", $"Task '{task.Name}': account or place is missing");
             }
             ToastService.Info(L.T("Toast.TaskRan.Title"), task.Name);
 
             // ---- Optional auto-close ----
-            if (task.AutoCloseAfterMinutes > 0 && attributionTasks.Count > 0)
-            {
-                _ = AutoCloseLaterAsync(task, TimeSpan.FromMinutes(task.AutoCloseAfterMinutes), attributionTasks);
-            }
+            if (task.AutoCloseAfterMinutes > 0 && launched > 0)
+                _ = AutoCloseLaterAsync(task, TimeSpan.FromMinutes(task.AutoCloseAfterMinutes), origin);
         }
         catch { /* a single bad task must not take down the scheduler */ }
     }
 
-    private static async Task AutoCloseLaterAsync(ScheduledTask task, TimeSpan after, IReadOnlyList<Task<ProcessRegistry.ProcessToken?>> attributionTasks)
+    private static async Task AutoCloseLaterAsync(ScheduledTask task, TimeSpan after, string origin)
     {
-        await Task.Delay(after);
-
-        var tokens = new HashSet<ProcessRegistry.ProcessToken>();
-        foreach (var attribution in attributionTasks)
+        try
         {
-            try
-            {
-                if (await attribution is { } token) tokens.Add(token);
-            }
-            catch { }
-        }
+            await Task.Delay(after);
 
+            // The schedule is over: a crashed client of this run that is waiting out a rejoin delay
+            // stays closed.
+            WatchdogService.CancelRejoins(origin);
+            int closed = CloseOrigin(origin);
+
+            // A relaunch that was already under way only shows up once its client is attributed
+            // (up to ~40 s after the launch), so look once more.
+            await Task.Delay(TimeSpan.FromSeconds(60));
+            WatchdogService.CancelRejoins(origin);
+            closed += CloseOrigin(origin);
+
+            if (closed > 0)
+                DiagnosticsService.Log("scheduler", $"Auto-closed {closed} client(s) for task '{task.Name}'");
+        }
+        catch (Exception ex) { DiagnosticsService.Warn("scheduler", $"Auto-close for task '{task.Name}' failed", ex); }
+    }
+
+    /// <summary>Closes every live client tagged with <paramref name="origin"/>. Returns how many closed.</summary>
+    private static int CloseOrigin(string origin)
+    {
         int closed = 0;
-        foreach (var token in tokens)
+        foreach (var t in ProcessRegistry.All.Where(t => t.Origin == origin).ToList())
         {
             try
             {
-                if (InstanceControlService.Close(token)) closed++;
+                if (InstanceControlService.Close(ProcessRegistry.TokenFor(t))) closed++;
             }
-            catch (Exception ex) { DiagnosticsService.Warn("scheduler", $"Auto-close failed for pid {token.Pid}", ex); }
+            catch (Exception ex) { DiagnosticsService.Warn("scheduler", $"Auto-close failed for pid {t.Pid}", ex); }
         }
-
-        if (closed > 0)
-            DiagnosticsService.Log("scheduler", $"Auto-closed {closed} client(s) for task '{task.Name}'");
+        return closed;
     }
 
     /// <summary>
@@ -191,7 +205,7 @@ public static class SchedulerService
             if (!targetUserIds.Contains(t.UserId)) continue;
             try
             {
-                if (InstanceControlService.Close(t.Pid)) closed++;
+                if (InstanceControlService.Close(ProcessRegistry.TokenFor(t))) closed++;
             }
             catch (Exception ex) { DiagnosticsService.Warn("scheduler", $"Auto-close failed for pid {t.Pid}", ex); }
         }
