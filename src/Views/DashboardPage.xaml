@@ -189,11 +189,11 @@
                                                         <Button Style="{StaticResource Btn.Icon}" Width="30" Height="30" ctl:Ui.Icon="{StaticResource Icon.External}"
                                                                 ToolTip="{DynamicResource Str.Clients.Focus}" IsEnabled="{Binding HasWindow}"
                                                                 Command="{Binding DataContext.FocusClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                CommandParameter="{Binding Pid}" />
+                                                                CommandParameter="{Binding}" />
                                                         <Button Style="{StaticResource Btn.Icon}" Width="30" Height="30" ctl:Ui.Icon="{StaticResource Icon.Close}"
                                                                 ToolTip="{DynamicResource Str.Clients.Close}"
                                                                 Command="{Binding DataContext.CloseClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                CommandParameter="{Binding Pid}" />
+                                                                CommandParameter="{Binding}" />
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>

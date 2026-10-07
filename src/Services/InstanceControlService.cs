@@ -20,6 +20,7 @@ public static class InstanceControlService
     public sealed class ClientInfo
     {
         public int Pid { get; init; }
+        public ProcessRegistry.ProcessToken Token { get; init; }
         public long UserId { get; init; }
         public string Alias { get; init; } = "";
         public long PlaceId { get; init; }
@@ -88,17 +89,19 @@ public static class InstanceControlService
 
             foreach (var t in ProcessRegistry.All)
             {
+                var token = ProcessRegistry.TokenFor(t);
                 list.Add(new ClientInfo
                 {
                     Pid = t.Pid,
+                    Token = token,
                     UserId = t.UserId,
                     Alias = t.Alias,
                     PlaceId = t.PlaceId,
                     JobId = t.JobId,
                     Uptime = t.Uptime,
-                    MemoryBytes = ProcessRegistry.MemoryBytes(t.Pid),
+                    MemoryBytes = ProcessRegistry.MemoryBytes(token),
                     IsExternal = t.IsExternal,
-                    HasWindow = ProcessRegistry.WindowHandle(t.Pid) != IntPtr.Zero,
+                    HasWindow = ProcessRegistry.WindowHandle(token) != IntPtr.Zero,
                 });
             }
 
@@ -122,10 +125,13 @@ public static class InstanceControlService
     /// already exited — the caller decides whether that is worth telling the user about.
     /// </summary>
     public static bool Focus(int pid)
+        => ProcessRegistry.TryGetToken(pid, out var token) && Focus(token);
+
+    public static bool Focus(ProcessRegistry.ProcessToken token)
     {
         try
         {
-            var hWnd = ProcessRegistry.WindowHandle(pid);
+            var hWnd = ProcessRegistry.WindowHandle(token);
             if (hWnd == IntPtr.Zero) return false;
 
             Win32.ForceForeground(hWnd);
@@ -141,26 +147,25 @@ public static class InstanceControlService
     /// or the process refused to die.
     /// </summary>
     public static bool Close(int pid)
+        => ProcessRegistry.TryGetToken(pid, out var token) && Close(token);
+
+    public static bool Close(ProcessRegistry.ProcessToken token)
     {
         bool closed = false;
         try
         {
-            using var p = Process.GetProcessById(pid);
+            using var p = Process.GetProcessById(token.Pid);
 
-            // Windows recycles PIDs. Without this name check a stale registry entry could kill
-            // whatever unrelated process inherited the number.
-            bool isClient = !p.HasExited &&
-                            p.ProcessName.StartsWith("RobloxPlayer", StringComparison.OrdinalIgnoreCase);
-
-            if (!isClient)
+            // Name alone is insufficient: Windows can recycle a stale PID onto a newer Roblox
+            // client. Require the exact identity captured when the caller selected this client.
+            if (p.HasExited || !ProcessRegistry.IsTrackedProcess(p, token))
             {
-                // The pid exists but isn't a client, so Prune() will never clear it — drop it here.
-                ProcessRegistry.Forget(pid);
+                ProcessRegistry.Prune();
                 return false;
             }
 
             // Deliberate: the watchdog must not treat this exit as a crash and relaunch it.
-            ProcessRegistry.MarkClosing(pid);
+            ProcessRegistry.MarkClosing(token);
             p.CloseMainWindow();
             closed = p.WaitForExit(1500);
             if (!closed)
@@ -178,7 +183,7 @@ public static class InstanceControlService
         {
             // Prune rather than Forget: the exit is reported, so the session is booked as playtime.
             ProcessRegistry.Prune();
-            AuditLogService.Log(AuditLogService.Category.Launch, $"Closed client pid {pid}.");
+            AuditLogService.Log(AuditLogService.Category.Launch, $"Closed client pid {token.Pid}.");
         }
         return closed;
     }
@@ -194,9 +199,9 @@ public static class InstanceControlService
         try
         {
             // Materialise first: Close() mutates the registry as we go.
-            var pids = ProcessRegistry.ForUser(userId).Select(t => t.Pid).ToList();
-            foreach (int pid in pids)
-                if (Close(pid)) closed++;
+            var tokens = ProcessRegistry.ForUser(userId).Select(ProcessRegistry.TokenFor).ToList();
+            foreach (var token in tokens)
+                if (Close(token)) closed++;
         }
         catch { }
 
@@ -309,7 +314,7 @@ public static class InstanceControlService
         {
             foreach (var t in ProcessRegistry.All)
             {
-                var h = ProcessRegistry.WindowHandle(t.Pid);
+                var h = ProcessRegistry.WindowHandle(ProcessRegistry.TokenFor(t));
                 if (h != IntPtr.Zero) list.Add(h);
             }
         }

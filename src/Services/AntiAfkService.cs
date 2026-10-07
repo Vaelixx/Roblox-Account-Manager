@@ -69,7 +69,7 @@ public static class AntiAfkService
 
             foreach (var t in ProcessRegistry.All)
             {
-                IntPtr hWnd = ProcessRegistry.WindowHandle(t.Pid);
+                IntPtr hWnd = ProcessRegistry.WindowHandle(ProcessRegistry.TokenFor(t));
                 if (hWnd == IntPtr.Zero) continue;
 
                 Win32.ForceForeground(hWnd);

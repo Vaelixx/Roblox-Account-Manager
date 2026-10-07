@@ -71,19 +71,15 @@ public static class RamMonitorService
 
         foreach (var t in ProcessRegistry.All)
         {
-            long mb;
-            try
-            {
-                using var p = Process.GetProcessById(t.Pid);
-                p.Refresh();
-                mb = p.WorkingSet64 / (1024 * 1024);
-            }
-            catch { continue; } // process gone between registry read and here → skip
+            var token = ProcessRegistry.TokenFor(t);
+            long bytes = ProcessRegistry.MemoryBytes(token);
+            if (bytes < 0) continue;
+            long mb = bytes / (1024 * 1024);
 
             snapshot.Add(new Sample(t.Pid, t.Alias, mb));
 
             if (s.AutoCloseOnHighRam && s.RamLimitMb > 0 && mb > s.RamLimitMb)
-                TryKill(t.Pid, t.Alias, mb, s.RamLimitMb);
+                TryKill(token, t.Alias, mb, s.RamLimitMb);
         }
 
         Latest = snapshot;
@@ -117,7 +113,9 @@ public static class RamMonitorService
         {
             try
             {
-                using var p = Process.GetProcessById(t.Pid);
+                var token = ProcessRegistry.TokenFor(t);
+                using var p = Process.GetProcessById(token.Pid);
+                if (!ProcessRegistry.IsTrackedProcess(p, token)) continue;
                 p.Refresh();
                 long b = p.WorkingSet64;
 
@@ -164,13 +162,13 @@ public static class RamMonitorService
         }
     }
 
-    private static void TryKill(int pid, string alias, long mb, int limit)
+    private static void TryKill(ProcessRegistry.ProcessToken token, string alias, long mb, int limit)
     {
         try
         {
-            using var p = Process.GetProcessById(pid);
-            if (!p.ProcessName.StartsWith("RobloxPlayer", StringComparison.OrdinalIgnoreCase)) { ProcessRegistry.Forget(pid); return; }
-            ProcessRegistry.MarkClosing(pid);
+            using var p = Process.GetProcessById(token.Pid);
+            if (!ProcessRegistry.IsTrackedProcess(p, token)) { ProcessRegistry.Prune(); return; }
+            ProcessRegistry.MarkClosing(token);
             p.Kill();
             DiagnosticsService.Warn("ram", $"Closed {alias}: {mb} MB is over the {limit} MB limit");
             if (SettingsService.Current.EnableToasts)

@@ -10,7 +10,7 @@ public static class LauncherService
 {
     // Last client spawned per account, so a relaunch can close it. Concurrent: written from delayed
     // attribution tasks, read from the UI thread and the "close all" hotkey.
-    private static readonly ConcurrentDictionary<long, int> _lastProcess = new();
+    private static readonly ConcurrentDictionary<long, ProcessRegistry.ProcessToken> _lastProcess = new();
 
     private static AccountStore? _store;
     public static void Init(AccountStore store) => _store = store;
@@ -48,7 +48,14 @@ public static class LauncherService
     {
         public bool Success { get; init; }
         public string Message { get; init; } = "";
-        public static LaunchResult Ok() => new() { Success = true, Message = L.T("Launch.Launched") };
+        public Task<ProcessRegistry.ProcessToken?>? AttributionTask { get; init; }
+
+        public static LaunchResult Ok(Task<ProcessRegistry.ProcessToken?>? attributionTask = null) => new()
+        {
+            Success = true,
+            Message = L.T("Launch.Launched"),
+            AttributionTask = attributionTask,
+        };
         public static LaunchResult Fail(string m) => new() { Success = false, Message = m };
     }
 
@@ -155,7 +162,7 @@ public static class LauncherService
                 try { await PresenceService.PollNowAsync(); } catch { }
             });
 
-            _ = Task.Run(() => AttributeClientAsync(acc, target.PlaceId, jobId, launchedAt));
+            Task<ProcessRegistry.ProcessToken?> attributionTask = Task.Run(() => AttributeClientAsync(acc, target.PlaceId, jobId, launchedAt));
 
             try { PluginService.RaiseLaunched(acc, target.PlaceId, jobId); } catch { }
             if (settings.ToastOnLaunch)
@@ -163,7 +170,7 @@ public static class LauncherService
             if (settings.NotifyOnConnect && WebhookService.Configured)
                 WebhookService.Connected(acc, target.PlaceId, jobId);
             AuditLogService.Log(AuditLogService.Category.Launch, $"Launched {acc.DisplayNameOrUser} into place {target.PlaceId}");
-            return LaunchResult.Ok();
+            return LaunchResult.Ok(attributionTask);
         }
         catch (Exception ex)
         {
@@ -176,19 +183,25 @@ public static class LauncherService
     /// a pending Roblox update, a slow disk) the client can take far longer than a few seconds to
     /// exist, and a single miss meant no Anti-AFK, crash watchdog or RAM cap for it.
     /// </summary>
-    private static async Task AttributeClientAsync(Account acc, long placeId, string? jobId, DateTime launchedAt)
+    private static async Task<ProcessRegistry.ProcessToken?> AttributeClientAsync(Account acc, long placeId, string? jobId, DateTime launchedAt)
     {
         await Task.Delay(4000);
 
-        int pid = 0;
-        for (int attempt = 0; attempt < 15 && pid == 0; attempt++)
+        ProcessRegistry.ProcessToken? token = null;
+        for (int attempt = 0; attempt < 15 && token == null; attempt++)
         {
-            try { pid = ProcessRegistry.RegisterNewest(acc, placeId, jobId, launchedAt); } catch { }
-            if (pid == 0) await Task.Delay(2000);
+            try
+            {
+                int pid = ProcessRegistry.RegisterNewest(acc, placeId, jobId, launchedAt);
+                if (pid != 0 && ProcessRegistry.TryGetToken(pid, out var resolved)) token = resolved;
+            }
+            catch { }
+            if (token == null) await Task.Delay(2000);
         }
 
-        if (pid != 0) _lastProcess[acc.UserId] = pid;
+        if (token is { } found) _lastProcess[acc.UserId] = found;
         else DiagnosticsService.Warn("launcher", $"No client could be attributed to {acc.DisplayNameOrUser} within 34s of launch");
+        return token;
     }
 
     /// <summary>
@@ -236,25 +249,25 @@ public static class LauncherService
                 await Task.Delay(5000);
                 try { await PresenceService.PollNowAsync(); } catch { }
             });
-            _ = Task.Run(() => AttributeClientAsync(acc, 0, null, launchedAt));
+            Task<ProcessRegistry.ProcessToken?> attributionTask = Task.Run(() => AttributeClientAsync(acc, 0, null, launchedAt));
             if (SettingsService.Current.ToastOnLaunch)
                 ToastService.Success(L.T("Toast.Launched.Title"), L.T("Toast.Launched.Body", acc.DisplayNameOrUser));
-            return LaunchResult.Ok();
+            return LaunchResult.Ok(attributionTask);
         }
         catch (Exception ex) { return LaunchResult.Fail(ExplainLaunchFailure(ex)); }
     }
 
     private static void CloseLast(Account acc)
     {
-        if (!_lastProcess.TryGetValue(acc.UserId, out int pid)) return;
+        if (!_lastProcess.TryGetValue(acc.UserId, out var token)) return;
         try
         {
-            using var p = Process.GetProcessById(pid);
-            if (!p.HasExited && p.ProcessName.StartsWith("RobloxPlayer", StringComparison.OrdinalIgnoreCase))
+            using var p = Process.GetProcessById(token.Pid);
+            if (!p.HasExited && ProcessRegistry.IsTrackedProcess(p, token))
             {
                 // A deliberate close, not a crash: flag it so the watchdog does not answer it with an
                 // auto-rejoin (the session is still booked as playtime).
-                ProcessRegistry.MarkClosing(pid);
+                ProcessRegistry.MarkClosing(token);
                 p.CloseMainWindow();
                 if (!p.WaitForExit(1500)) p.Kill();
             }
@@ -274,7 +287,9 @@ public static class LauncherService
                 if (!p.HasExited)
                 {
                     // Deliberate close: flag it so the watchdog does not auto-rejoin it.
-                    ProcessRegistry.MarkClosing(p.Id);
+                    if (ProcessRegistry.TryGetToken(p.Id, out var token)
+                        && ProcessRegistry.IsTrackedProcess(p, token))
+                        ProcessRegistry.MarkClosing(token);
                     p.CloseMainWindow();
                     if (!p.WaitForExit(1500)) p.Kill();
                     closed++;
