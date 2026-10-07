@@ -203,6 +203,12 @@ public class Account : ObservableObject
     /// <summary>Job id of the server the account is in, when Roblox shares it.</summary>
     [JsonIgnore] public string? GameId { get => _gameId; set => SetField(ref _gameId, value); }
 
+    /// <summary>
+    /// When Roblox last reported this account's presence. Older than <see cref="Services.PresenceService.LastFetchedUtc"/>
+    /// means the account was missing from the last answer, so <see cref="Presence"/> may be stale.
+    /// </summary>
+    [JsonIgnore] public DateTime PresenceFetchedUtc { get; set; }
+
     /// <summary>True when the account is in a sub-place rather than the experience's start place.</summary>
     [JsonIgnore] public bool IsSubPlace => PlaceId > 0 && RootPlaceId > 0 && PlaceId != RootPlaceId;
 

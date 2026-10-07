@@ -968,6 +968,7 @@
   "Watchdog.Restart.Desc": "Closes and relaunches each client after it has run this long, one at a time, into the same game and server type. Gives games that slowly use more memory a fresh start.",
   "Watchdog.Restart.Every": "every",
   "Watchdog.Disconnected": "{0} isn't in a game any more. Restarting it.",
+  "Watchdog.DisconnectGaveUp": "{0} didn't get into a game after {1} restarts in a row. It won't be restarted for a disconnect again until it is back in a game.",
   "Ram.Section": "Memory",
   "Ram.Monitor.Title": "Watch memory use",
   "Ram.Monitor.Desc": "Measures how much memory each Roblox client uses.",

@@ -969,6 +969,7 @@
   "Watchdog.Restart.Desc": "Schließt jeden Client nach dieser Laufzeit und startet ihn neu, einen nach dem anderen, ins selbe Spiel und dieselbe Serverart. Gibt Spielen, die nach und nach mehr Speicher brauchen, einen frischen Start.",
   "Watchdog.Restart.Every": "alle",
   "Watchdog.Disconnected": "{0} ist nicht mehr im Spiel. Wird neu gestartet.",
+  "Watchdog.DisconnectGaveUp": "{0} ist nach {1} Neustarts hintereinander in kein Spiel gekommen. Wegen eines Verbindungsabbruchs wird es erst wieder neu gestartet, wenn es wieder in einem Spiel war.",
   "Ram.Section": "Speicher",
   "Ram.Monitor.Title": "Speichernutzung überwachen",
   "Ram.Monitor.Desc": "Misst, wie viel Arbeitsspeicher jeder Roblox-Client nutzt.",

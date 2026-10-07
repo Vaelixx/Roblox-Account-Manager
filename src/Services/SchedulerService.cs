@@ -159,15 +159,14 @@ public static class SchedulerService
         {
             await Task.Delay(after);
 
-            // The schedule is over: a crashed client of this run that is waiting out a rejoin delay
-            // stays closed.
-            WatchdogService.CancelRejoins(origin);
+            // The schedule is over: a crashed client of this run is not rejoined any more, and a relaunch
+            // already under way closes the client it starts.
+            WatchdogService.EndOrigin(origin);
             int closed = CloseOrigin(origin);
 
-            // A relaunch that was already under way only shows up once its client is attributed
-            // (up to ~40 s after the launch), so look once more.
+            // A launch from this run that was still being attributed only shows up later (up to ~40 s
+            // after it started), so look once more.
             await Task.Delay(TimeSpan.FromSeconds(60));
-            WatchdogService.CancelRejoins(origin);
             closed += CloseOrigin(origin);
 
             if (closed > 0)
@@ -198,6 +197,9 @@ public static class SchedulerService
     {
         var targetUserIds = ResolveTargetUserIds(task);
         if (targetUserIds.Count == 0) return;
+
+        // A crashed client of these accounts waiting to be rejoined would come back after the close.
+        foreach (long id in targetUserIds) WatchdogService.CancelRejoin(id);
 
         int closed = 0;
         foreach (var t in ProcessRegistry.All)

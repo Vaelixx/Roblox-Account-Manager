@@ -202,6 +202,9 @@ public static class InstanceControlService
         int closed = 0;
         try
         {
+            // A crashed client waiting to be rejoined would come back after the close.
+            WatchdogService.CancelRejoin(userId);
+
             // Materialise first: Close() mutates the registry as we go.
             var tokens = ProcessRegistry.ForUser(userId).Select(ProcessRegistry.TokenFor).ToList();
             foreach (var token in tokens)

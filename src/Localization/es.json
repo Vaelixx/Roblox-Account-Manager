@@ -969,6 +969,7 @@
   "Watchdog.Restart.Desc": "Cierra y vuelve a abrir cada cliente tras este tiempo, de uno en uno, en el mismo juego y tipo de servidor. Da un inicio limpio a juegos que van usando cada vez más memoria.",
   "Watchdog.Restart.Every": "cada",
   "Watchdog.Disconnected": "{0} ya no está en un juego. Reiniciándolo.",
+  "Watchdog.DisconnectGaveUp": "{0} no entró en ningún juego tras {1} reinicios seguidos. No se volverá a reiniciar por una desconexión hasta que vuelva a estar en un juego.",
   "Ram.Section": "Memoria",
   "Ram.Monitor.Title": "Vigilar el uso de memoria",
   "Ram.Monitor.Desc": "Mide cuánta memoria usa cada cliente de Roblox.",

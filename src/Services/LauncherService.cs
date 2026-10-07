@@ -462,6 +462,9 @@ public static class LauncherService
     /// <summary>Closes every running Roblox client and returns how many were closed.</summary>
     public static int CloseAllClients()
     {
+        // Nothing should come back on its own afterwards: a crashed client waiting to be rejoined included.
+        WatchdogService.CancelAllRejoins();
+
         int closed = 0;
         foreach (var p in Process.GetProcessesByName("RobloxPlayerBeta"))
         {

@@ -20,8 +20,14 @@ public static class PresenceService
     // periodic tick can't both pass the guard and double up the network calls.
     private static int _busy;
 
-    /// <summary>Raised after every completed poll (fires on a threadpool thread).</summary>
+    /// <summary>Raised after every poll Roblox answered (fires on a threadpool thread).</summary>
     public static event Action? PresenceUpdated;
+
+    /// <summary>
+    /// When the last answered poll was taken. Accounts in that answer carry the same time in
+    /// <see cref="Models.Account.PresenceFetchedUtc"/>; any other account's presence is older.
+    /// </summary>
+    public static DateTime LastFetchedUtc { get; private set; }
 
     public static void Init(AccountStore store) => _store = store;
 
@@ -61,8 +67,12 @@ public static class PresenceService
 
         try
         {
-            await _store.RefreshPresenceOnlyAsync();
-            PresenceUpdated?.Invoke();
+            // A failed poll keeps the last known state on screen, and nothing may act on it as if it were new.
+            if (await _store.RefreshPresenceOnlyAsync() is { } fetched)
+            {
+                LastFetchedUtc = fetched;
+                PresenceUpdated?.Invoke();
+            }
         }
         catch { /* transient network failure — retry on the next tick */ }
         finally { Interlocked.Exchange(ref _busy, 0); }

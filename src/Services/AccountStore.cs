@@ -447,22 +447,27 @@ public class AccountStore
         }));
     }
 
-    /// <summary>Presence-only refresh for the live timer: one authenticated batch call per 50 accounts.</summary>
-    public Task RefreshPresenceOnlyAsync() => ApplyPresenceAsync(Accounts.ToList());
+    /// <summary>
+    /// Presence-only refresh for the live timer: one authenticated batch call per 50 accounts. Returns
+    /// when the answer was taken, or null when Roblox did not answer.
+    /// </summary>
+    public Task<DateTime?> RefreshPresenceOnlyAsync() => ApplyPresenceAsync(Accounts.ToList());
 
-    private static async Task ApplyPresenceAsync(List<Account> accounts)
+    private static async Task<DateTime?> ApplyPresenceAsync(List<Account> accounts)
     {
-        if (accounts.Count == 0) return;
+        if (accounts.Count == 0) return null;
         var authCookie = accounts.FirstOrDefault(a => a.IsValid && !string.IsNullOrEmpty(a.Cookie))?.Cookie;
-        if (authCookie == null) return;
+        if (authCookie == null) return null;
 
         var pres = await RobloxApi.GetPresenceDetailsAsync(authCookie, accounts.Select(a => a.UserId));
-        if (pres.Count == 0) return;   // request failed — keep the last known state instead of flashing "offline"
+        if (pres.Count == 0) return null;   // request failed — keep the last known state instead of flashing "offline"
 
+        var fetched = DateTime.UtcNow;
         foreach (var a in accounts)
         {
             if (pres.TryGetValue(a.UserId, out var p))
             {
+                a.PresenceFetchedUtc = fetched;
                 a.Presence = p.Status;
                 a.PlaceId = p.PlaceId;
                 a.RootPlaceId = p.RootPlaceId;
@@ -478,6 +483,7 @@ public class AccountStore
                 a.LastLocation = "";
             }
         }
+        return fetched;
     }
 
     public async Task RefreshIdentityAsync(Account acc)

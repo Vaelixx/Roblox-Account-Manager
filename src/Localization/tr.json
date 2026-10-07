@@ -969,6 +969,7 @@
   "Watchdog.Restart.Desc": "Her istemciyi bu süre çalıştıktan sonra, teker teker, aynı oyuna ve sunucu türüne kapatıp yeniden başlatır. Giderek daha fazla bellek kullanan oyunlara temiz bir başlangıç sağlar.",
   "Watchdog.Restart.Every": "her",
   "Watchdog.Disconnected": "{0} artık oyunda değil. Yeniden başlatılıyor.",
+  "Watchdog.DisconnectGaveUp": "{0}, art arda {1} yeniden başlatmadan sonra bir oyuna giremedi. Tekrar bir oyuna girene kadar bağlantı kopması nedeniyle yeniden başlatılmayacak.",
   "Ram.Section": "Bellek",
   "Ram.Monitor.Title": "Bellek kullanımını izle",
   "Ram.Monitor.Desc": "Her Roblox istemcisinin ne kadar bellek kullandığını ölçer.",
