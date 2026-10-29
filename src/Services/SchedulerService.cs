@@ -5,7 +5,8 @@ namespace RobloxAccountManager.Services;
 /// <summary>
 /// Evaluates <see cref="ScheduledTask"/>s once per minute. A task fires when the current local
 /// time matches its <c>HH:mm</c> and day filter; a per-task guard stops it re-firing within the
-/// same minute. Launch tasks run a preset or a single account; Close tasks kill matching clients.
+/// same minute. Launch tasks run a preset or a single account; Close tasks kill matching clients;
+/// Restart tasks close the matching clients (all of them without a target) and relaunch them one by one.
 /// Optional auto-close ends the launched clients after N minutes.
 /// </summary>
 public static class SchedulerService
@@ -105,6 +106,17 @@ public static class SchedulerService
                 // An explicit "close" task means every client of those accounts, no exclusions —
                 // unlike the auto-close after a launch, which only reclaims what it started.
                 CloseMatchingAccounts(task);
+                return;
+            }
+
+            if (task.Action == ScheduleAction.Restart)
+            {
+                var ids = ResolveTargetUserIds(task);
+                bool everyone = string.IsNullOrWhiteSpace(task.PresetName) && string.IsNullOrWhiteSpace(task.Alias);
+                var clients = ProcessRegistry.All.Where(t => everyone || ids.Contains(t.UserId)).ToList();
+                int back = await WatchdogService.RestartAllAsync(clients);
+                DiagnosticsService.Log("scheduler", $"Task '{task.Name}' restarted {back} client(s)");
+                ToastService.Info(L.T("Toast.TaskRan.Title"), task.Name);
                 return;
             }
 

@@ -405,7 +405,12 @@ public class SettingsViewModel : ObservableObject
     // Ultra-low AFK profile: every part can be switched off on its own.
     private UltraLowOptions Afk => S.UltraLowAfk;
     public int AfkProfileFpsCap { get => Afk.FpsCap; set { Afk.FpsCap = value <= 0 ? 0 : Math.Clamp(value, 5, 1000); Persist(); OnPropertyChanged(); } }
-    public bool AfkProfileMinimize { get => Afk.MinimizeWhenInGame; set { Afk.MinimizeWhenInGame = value; Persist(); OnPropertyChanged(); } }
+
+    public bool ResizeClientWindows { get => S.ResizeClientWindows; set { S.ResizeClientWindows = value; Persist(); OnPropertyChanged(); } }
+    /// <summary>0 shows as empty: the smallest size Roblox allows.</summary>
+    public string ClientWindowWidth { get => S.ClientWindowWidth > 0 ? S.ClientWindowWidth.ToString() : ""; set { S.ClientWindowWidth = ParseSize(value, 7680); Persist(); OnPropertyChanged(); } }
+    public string ClientWindowHeight { get => S.ClientWindowHeight > 0 ? S.ClientWindowHeight.ToString() : ""; set { S.ClientWindowHeight = ParseSize(value, 4320); Persist(); OnPropertyChanged(); } }
+    private static int ParseSize(string? value, int max) => int.TryParse(value, out int v) && v > 0 ? Math.Clamp(v, 100, max) : 0;
     public bool AfkLowestQuality { get => Afk.LowestQuality; set { Afk.LowestQuality = value; Persist(); OnPropertyChanged(); } }
     public bool AfkNoAntiAliasing { get => Afk.NoAntiAliasing; set { Afk.NoAntiAliasing = value; Persist(); OnPropertyChanged(); } }
     public bool AfkLowestTextures { get => Afk.LowestTextures; set { Afk.LowestTextures = value; Persist(); OnPropertyChanged(); } }
@@ -527,6 +532,9 @@ public class SettingsViewModel : ObservableObject
     public IEnumerable<string> AntiAfkKeys => new[] { "Space", "Shift", "Ctrl", "W", "A", "S", "D", "0", "F13" };
     public string AntiAfkKey { get => S.AntiAfkKey; set { if (!string.IsNullOrEmpty(value)) { S.AntiAfkKey = value; Persist(); OnPropertyChanged(); } } }
     public bool AntiAfkRestoreFocus { get => S.AntiAfkRestoreFocus; set { S.AntiAfkRestoreFocus = value; Persist(); OnPropertyChanged(); } }
+    public int AntiAfkPresses { get => S.AntiAfkPresses; set { S.AntiAfkPresses = Math.Clamp(value, 1, 10); Persist(); OnPropertyChanged(); } }
+    public int AntiAfkFocusSeconds { get => S.AntiAfkFocusSeconds; set { S.AntiAfkFocusSeconds = Math.Clamp(value, 0, 30); Persist(); OnPropertyChanged(); } }
+    public bool AntiAfkHelpLoading { get => S.AntiAfkHelpLoading; set { S.AntiAfkHelpLoading = value; Persist(); AntiAfkService.Apply(); OnPropertyChanged(); } }
     public RelayCommand TestAntiAfkCommand { get; }
     public RelayCommand CopyDiagnosticsCommand { get; }
     public AsyncRelayCommand TestBrowserCommand { get; }
@@ -542,7 +550,7 @@ public class SettingsViewModel : ObservableObject
     public bool WatchdogEnabled { get => S.WatchdogEnabled; set { S.WatchdogEnabled = value; Persist(); WatchdogService.Apply(); OnPropertyChanged(); } }
     public int WatchdogCheckSeconds { get => S.WatchdogCheckSeconds; set { S.WatchdogCheckSeconds = Math.Clamp(value, 5, 600); Persist(); WatchdogService.Apply(); OnPropertyChanged(); } }
     public bool RejoinOnDisconnect { get => S.RejoinOnDisconnect; set { S.RejoinOnDisconnect = value; Persist(); OnPropertyChanged(); } }
-    public int DisconnectMinutes { get => S.DisconnectMinutes; set { S.DisconnectMinutes = Math.Clamp(value, 2, 60); Persist(); OnPropertyChanged(); } }
+    public int DisconnectMinutes { get => S.DisconnectMinutes; set { S.DisconnectMinutes = Math.Clamp(value, 1, 60); Persist(); OnPropertyChanged(); } }
     public bool RestartClientsEnabled { get => S.RestartClientsEnabled; set { S.RestartClientsEnabled = value; Persist(); WatchdogService.Apply(); OnPropertyChanged(); } }
     public int RestartClientsMinutes { get => S.RestartClientsMinutes; set { S.RestartClientsMinutes = Math.Clamp(value, 30, 24 * 60); Persist(); OnPropertyChanged(); } }
 
@@ -550,6 +558,8 @@ public class SettingsViewModel : ObservableObject
     public int RamMonitorSeconds { get => S.RamMonitorSeconds; set { S.RamMonitorSeconds = Math.Clamp(value, 2, 600); Persist(); RamMonitorService.Apply(); OnPropertyChanged(); } }
     public bool AutoCloseOnHighRam { get => S.AutoCloseOnHighRam; set { S.AutoCloseOnHighRam = value; Persist(); OnPropertyChanged(); } }
     public int RamLimitMb { get => S.RamLimitMb; set { S.RamLimitMb = Math.Clamp(value, 256, 65536); Persist(); OnPropertyChanged(); } }
+    public bool RestartOnRamGrowth { get => S.RestartOnRamGrowth; set { S.RestartOnRamGrowth = value; Persist(); RamMonitorService.Apply(); WatchdogService.Apply(); OnPropertyChanged(); } }
+    public double RamGrowthFactor { get => S.RamGrowthFactor; set { S.RamGrowthFactor = Math.Clamp(value, 1.2, 10); Persist(); OnPropertyChanged(); } }
     public bool AutoTrimEnabled { get => S.AutoTrimEnabled; set { S.AutoTrimEnabled = value; Persist(); RamMonitorService.ApplyAutoTrim(); OnPropertyChanged(); } }
     public int AutoTrimMinutes { get => S.AutoTrimMinutes; set { S.AutoTrimMinutes = Math.Clamp(value, 5, 240); Persist(); RamMonitorService.ApplyAutoTrim(); OnPropertyChanged(); } }
     public RelayCommand TrimRamCommand { get; }

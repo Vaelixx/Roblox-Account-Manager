@@ -9,7 +9,9 @@ namespace RobloxAccountManager.Services;
 /// </summary>
 public static class RamMonitorService
 {
-    public record Sample(int Pid, string Alias, long WorkingSetMb);
+    /// <param name="PrivateMb">Memory the client has committed for itself. Unlike the working set it
+    /// doesn't drop when the client is trimmed, so it is what memory-growth restarts compare.</param>
+    public record Sample(int Pid, string Alias, long WorkingSetMb, long PrivateMb = 0);
 
     private static System.Threading.Timer? _timer;
     private static readonly object _gate = new();
@@ -26,7 +28,8 @@ public static class RamMonitorService
     public static void Apply()
     {
         var s = SettingsService.Current;
-        if (s.RamMonitorEnabled) Start(Math.Max(2, s.RamMonitorSeconds));
+        // Memory-growth restarts (WatchdogService) need the samples even with the monitor itself off.
+        if (s.RamMonitorEnabled || s.RestartOnRamGrowth) Start(Math.Max(2, s.RamMonitorSeconds));
         else Stop();
         ApplyAutoTrim();
     }
@@ -72,13 +75,20 @@ public static class RamMonitorService
         foreach (var t in ProcessRegistry.All)
         {
             var token = ProcessRegistry.TokenFor(t);
-            long bytes = ProcessRegistry.MemoryBytes(token);
-            if (bytes < 0) continue;
-            long mb = bytes / (1024 * 1024);
+            long mb, privateMb;
+            try
+            {
+                using var p = Process.GetProcessById(t.Pid);
+                if (!ProcessRegistry.IsTrackedProcess(p, token)) continue;   // pid reused by another process
+                p.Refresh();
+                mb = p.WorkingSet64 / (1024 * 1024);
+                privateMb = p.PrivateMemorySize64 / (1024 * 1024);
+            }
+            catch { continue; } // process gone between registry read and here → skip
 
-            snapshot.Add(new Sample(t.Pid, t.Alias, mb));
+            snapshot.Add(new Sample(t.Pid, t.Alias, mb, privateMb));
 
-            if (s.AutoCloseOnHighRam && s.RamLimitMb > 0 && mb > s.RamLimitMb)
+            if (s.RamMonitorEnabled && s.AutoCloseOnHighRam && s.RamLimitMb > 0 && mb > s.RamLimitMb)
                 TryKill(token, t.Alias, mb, s.RamLimitMb);
         }
 

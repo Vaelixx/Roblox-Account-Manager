@@ -15,6 +15,71 @@ into the exe and shown in **What's new**, so a release no longer needs its own n
 
 ---
 
+## Unreleased
+
+### Changed
+
+- **"Rejoin after a disconnect" reads each client's own Roblox log instead of online status.**
+  Presence was the wrong signal: an account that hides its game from others never shows as in game,
+  so its client was closed and relaunched every few minutes. A client is now restarted only when its
+  log shows it left its game (disconnected, kicked, server shut down, a teleport or join that never
+  finished). Teleports don't count, accounts with several clients are covered, online status is no
+  longer needed for it, and the default wait is 1 minute.
+- **No more auto-minimize in the Ultra-low AFK profile.** Roblox stops loading while minimized.
+  Replaced by **Settings → Graphics → Client windows**: new clients are shrunk to the smallest size
+  Roblox allows (or a size you set) and placed side by side, so they keep loading and stay connected.
+
+### Added
+
+- **Scheduled restarts.** A scheduled task can now **Restart**: at the set time it closes the
+  target's clients (or every running client when no target is picked), then relaunches them one at a
+  time into the same game.
+- **Anti-AFK timing varies every time.** The clients are visited in a random order, and each wait
+  is random: before the key press (after the window has focus), how long the key is held, and the
+  pause before the next client. Turn on **Random timing** to vary the interval between presses as well.
+- **Restart clients that keep growing.** Optional: a client whose memory reaches a multiple (2× by
+  default) of its size after its first 10 minutes is restarted into the same game.
+- **Anti-AFK presses the key several times per visit** (3 by default, a random 1–2.5 s apart) after
+  the window has had focus for a few seconds (**Focus time**, 2 s by default). One short tap could fall
+  between the frames of a client throttled in the background, and the account was idle-kicked anyway.
+- **Help loading clients** (Anti-AFK, on by default): a client whose log shows it still loading a game
+  after 45 seconds gets focus for a moment. Roblox in the background can stall mid-load, often after a
+  reconnect, until its window is focused.
+
+### Fixed
+
+- **A second client could be launched next to one that was still running**, leaving the old one
+  on "same account launched from a different device". A rejoin no longer launches when the old
+  client could not be closed. A client only counts as exited once it is gone from the process
+  list (one failed lookup no longer counts). A client kicked because another client of the same
+  account is running, or because the account joined elsewhere, is closed and not relaunched.
+- **A new client can no longer hand its launch to one already running.** Right before each launch
+  the manager clears Roblox's single-instance lock again instead of waiting for the next timed sweep.
+  A client that had recreated it took over the launch: the new process exited after 6 seconds, and
+  the running client could switch accounts, which kicked the other session with "started elsewhere".
+- **A client that exits within a minute while a newer unclaimed client is running** is followed to
+  that client instead of being rejoined (the first process handed over to it); a rejoin there put two
+  clients on one account.
+- **Healthy clients were restarted as "stuck on Starting".** A client could be matched to the
+  crash handler's or the installer's log, which never shows a join, so after 5 minutes it was closed
+  and relaunched. Only game-client logs are matched now, a log that turns out to be another account's
+  is not picked again (it was retried every 5 seconds for minutes), and a slow load gets 8 minutes.
+- **Stuck Roblox processes are cleared.** A Roblox process with no window for 3 minutes that the
+  manager didn't launch (the empty "started outside the manager" entries) is closed, and one of the
+  manager's own is restarted. Such a process could keep every new client from starting until the PC
+  was restarted. When a client exits within seconds of starting, the diagnostics log now lists what
+  Roblox processes are running.
+- **Clients open windowed.** With **Client windows** on, launches turn Roblox's Fullscreen setting off,
+  and a maximized window is restored before it is shrunk. A fullscreen or borderless window is no
+  longer shrunk (that left a glitchy small window).
+- **Anti-AFK key presses reach the game.** The window came to the front but the character never
+  jumped: the key was sent as a Windows key code without the keyboard's scan code, and Roblox reads
+  the scan code. Each visit is now logged ("Pressed Space 3x in …'s window"), and a press Windows
+  refuses is reported.
+- **Anti-AFK keeps retrying a window that won't take focus** every minute instead of going back to the
+  full interval after three tries, which could leave more than 20 minutes between key presses. When
+  Windows refuses the focus, it now tries once more after a no-op key press (F13).
+
 ## v2.2.0 — 2026-10-07
 
 Fixes for both reported problems, the six community pull requests, and a round of reliability work
@@ -295,8 +360,8 @@ session cookie is fetched automatically and validated before the account is stor
 - **Two-step verification is handled in the dialog.** When the account has 2FA on, a code field
   appears and says where the code comes from — the authenticator app or the email Roblox just sent.
 - **Captchas fall back to a real browser.** Roblox answers some sign-ins with an Arkose puzzle or a
-  device confirmation, which nothing but a browser can display. *Sign in in a browser window
-  instead* opens the genuine Roblox login page in a throw-away profile, waits for you to finish, and
+  device confirmation, which nothing but a browser can display. _Sign in in a browser window
+  instead_ opens the genuine Roblox login page in a throw-away profile, waits for you to finish, and
   picks the session up over the DevTools protocol. The profile is wiped the moment the window closes.
 - **Pasting a cookie still works** — it moved to the second tab and is unchanged.
 
@@ -317,7 +382,7 @@ embedded copy, offline.
 
 ### Fixes
 
-- **Cookie validation marked healthy accounts as dead.** The startup check treated *any* failed
+- **Cookie validation marked healthy accounts as dead.** The startup check treated _any_ failed
   lookup as a rejected cookie, so an HTTP 429 — which validating several accounts at once provokes
   by itself — or simply being offline flagged good accounts invalid and sent people off to re-add
   them. Only an explicit 401/403 from Roblox counts now; anything inconclusive leaves the previous
@@ -364,7 +429,7 @@ Settings → About now shows which client is installed and who handles launches.
 
 ### New
 
-- **RAM trimming.** *Trim now* hands every tracked client's idle memory back to Windows, with an
+- **RAM trimming.** _Trim now_ hands every tracked client's idle memory back to Windows, with an
   optional automatic trim on an interval. The status line reports how much was released. Note this
   is not a permanent saving — the pages return when a client touches them again; it helps when
   several clients are open and the machine starts to run short.
@@ -386,20 +451,20 @@ This version gives every one of them a real UI, and fixes the ones that were als
 
 ### New
 
-| Feature | Where | What it does |
-|---|---|---|
-| **Anti-AFK** | Settings → Automation | Focuses each running client, sends one key tap, returns you to what you were doing. Configurable interval and key, plus *Run one pass now*. |
-| **Crash watchdog** | Settings → Automation | Notices when a tracked client closes or crashes. Accounts with the new per-account **Auto-rejoin** switch are relaunched into the same server, with a brake that gives up after 3 crashes in 10 minutes. |
-| **RAM monitor** | Settings → Automation | Live per-client memory readout, with an optional cap that closes a client that runs away. |
-| **FastFlags** | Settings → FastFlags | Uncap frame rate, disable telemetry, force voxel lighting, disable voice chat, plus a raw JSON editor with live validation. *Write flags now* and *Clear all flags*. |
-| **Per-account FastFlags** | Accounts → details | Extra flags applied only when that account launches, merged on top of the global set. |
-| **Two-factor codes** | Accounts → details | Paste the Base32 secret Roblox shows under *"Can't scan the QR code?"* and get the live 6-digit code with a rollover countdown and a copy button. Generated locally — nothing leaves the machine. |
-| **Global hotkeys** | Settings → Global hotkeys | Record a chord per action (launch, server-hop, close all, focus manager). Click, press, done. |
-| **Local control API** | Settings → Local API | Bearer-token HTTP server on 127.0.0.1 for scripting the manager, with token generation, copy, and the endpoint list. |
-| **Proxy** | Settings → Proxy | Route the manager's Roblox API traffic through a proxy, with credentials and a *Test proxy* button. |
-| **Encrypted backup / restore** | Settings → Security | Portable, password-encrypted export of your accounts (AES-256-GCM, PBKDF2-SHA256). `accounts.dat` is DPAPI-bound to one Windows user; a backup restores anywhere. Restoring **merges** — existing accounts keep their place and only get a fresh cookie. |
-| **More live-data control** | Settings → Live data | Economy tracking toggle and an adjustable presence poll interval. |
-| **More security control** | Settings → Security | Startup cookie validation (plus *Check all cookies now*), rotated-cookie capture, and the audit log. |
+| Feature                        | Where                     | What it does                                                                                                                                                                                                                                             |
+| ------------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anti-AFK**                   | Settings → Automation     | Focuses each running client, sends one key tap, returns you to what you were doing. Configurable interval and key, plus _Run one pass now_.                                                                                                              |
+| **Crash watchdog**             | Settings → Automation     | Notices when a tracked client closes or crashes. Accounts with the new per-account **Auto-rejoin** switch are relaunched into the same server, with a brake that gives up after 3 crashes in 10 minutes.                                                 |
+| **RAM monitor**                | Settings → Automation     | Live per-client memory readout, with an optional cap that closes a client that runs away.                                                                                                                                                                |
+| **FastFlags**                  | Settings → FastFlags      | Uncap frame rate, disable telemetry, force voxel lighting, disable voice chat, plus a raw JSON editor with live validation. _Write flags now_ and _Clear all flags_.                                                                                     |
+| **Per-account FastFlags**      | Accounts → details        | Extra flags applied only when that account launches, merged on top of the global set.                                                                                                                                                                    |
+| **Two-factor codes**           | Accounts → details        | Paste the Base32 secret Roblox shows under _"Can't scan the QR code?"_ and get the live 6-digit code with a rollover countdown and a copy button. Generated locally — nothing leaves the machine.                                                        |
+| **Global hotkeys**             | Settings → Global hotkeys | Record a chord per action (launch, server-hop, close all, focus manager). Click, press, done.                                                                                                                                                            |
+| **Local control API**          | Settings → Local API      | Bearer-token HTTP server on 127.0.0.1 for scripting the manager, with token generation, copy, and the endpoint list.                                                                                                                                     |
+| **Proxy**                      | Settings → Proxy          | Route the manager's Roblox API traffic through a proxy, with credentials and a _Test proxy_ button.                                                                                                                                                      |
+| **Encrypted backup / restore** | Settings → Security       | Portable, password-encrypted export of your accounts (AES-256-GCM, PBKDF2-SHA256). `accounts.dat` is DPAPI-bound to one Windows user; a backup restores anywhere. Restoring **merges** — existing accounts keep their place and only get a fresh cookie. |
+| **More live-data control**     | Settings → Live data      | Economy tracking toggle and an adjustable presence poll interval.                                                                                                                                                                                        |
+| **More security control**      | Settings → Security       | Startup cookie validation (plus _Check all cookies now_), rotated-cookie capture, and the audit log.                                                                                                                                                     |
 
 ### Fixes
 
@@ -417,7 +482,7 @@ This version gives every one of them a real UI, and fixes the ones that were als
 
 - The backup password minimum is **12 characters**, deliberately stricter than the master password on `accounts.dat`. That file keeps every cookie individually DPAPI-wrapped, so cracking its password still leaves the cookies bound to the original Windows user. A backup stores raw cookies by design — that is what makes it portable — so its password is the only thing between the file and full account takeover, and the file is meant to travel.
 - API tokens are generated from a cryptographic RNG (192 bits). The control server stays bound to `127.0.0.1`, every route but `/ping` requires the token, and the settings page says plainly that anyone able to run code as you can read it.
-- *Test proxy* deliberately sends no cookie, so pointing it at an untrusted proxy cannot leak a session.
+- _Test proxy_ deliberately sends no cookie, so pointing it at an untrusted proxy cannot leak a session.
 
 ### Under the hood
 
@@ -433,26 +498,26 @@ This version gives every one of them a real UI, and fixes the ones that were als
 
 This is the headline fix. Roblox enforces single-instance with **two** guards, and the app only ever defeated one of them:
 
-| Guard | Where it lives | Before |
-|---|---|---|
-| `ROBLOX_singletonMutex` | global named mutex | held open ✅ |
+| Guard                   | Where it lives                 | Before       |
+| ----------------------- | ------------------------------ | ------------ |
+| `ROBLOX_singletonMutex` | global named mutex             | held open ✅ |
 | `ROBLOX_singletonEvent` | **inside each client process** | untouched ❌ |
 
-Because of the second guard, pressing **Play** on roblox.com, launching from the Roblox home screen, or opening a Discord invite while a client was already running did *not* open a new window — the new client handed its launch URL to the running one and exited. Launches from the manager itself were unaffected, since those carry a fresh auth ticket the running client accepts, which is why the problem looked inconsistent.
+Because of the second guard, pressing **Play** on roblox.com, launching from the Roblox home screen, or opening a Discord invite while a client was already running did _not_ open a new window — the new client handed its launch URL to the running one and exited. Launches from the manager itself were unaffected, since those carry a fresh auth ticket the running client accepts, which is why the problem looked inconsistent.
 
 The new guard clears that per-client lock in every running client and keeps doing so via a lightweight watcher, so a client the app never started is treated exactly like one it did.
 
 ### New
 
-- **Multi-instance guard panel** (Settings → Launch) — live status, a *Fix multi-instance now* button, and a *Restart as administrator* option that appears only when elevation would actually help
+- **Multi-instance guard panel** (Settings → Launch) — live status, a _Fix multi-instance now_ button, and a _Restart as administrator_ option that appears only when elevation would actually help
 - **External clients are managed too** — clients started from the website or home screen are adopted into the registry, so Anti-AFK, the RAM monitor and the window grid can reach them
 - **Self-check** (Settings → Diagnostics) — verifies the Roblox install, the `roblox-player` protocol handler (and warns when another launcher has hijacked it), data-folder writability, free disk space, Roblox API reachability, and the multi-instance guard
-- **Diagnostics log** — one rotating, cookie-scrubbed log with an in-app error counter, *Open log folder* and *Clear log*
+- **Diagnostics log** — one rotating, cookie-scrubbed log with an in-app error counter, _Open log folder_ and _Clear log_
 - **Client window controls** — arrange every client in a grid, minimize all, restore all
 
 ### Fixes
 
-- **Data loss:** an account file that failed to decrypt (typically copied from another Windows user or PC) silently loaded as *empty*, and the next save overwrote the real file **and its backup**. The app now refuses to start and tells you where the file is.
+- **Data loss:** an account file that failed to decrypt (typically copied from another Windows user or PC) silently loaded as _empty_, and the next save overwrote the real file **and its backup**. The app now refuses to start and tells you where the file is.
 - **Wrong client attribution:** two accounts launched close together were deterministically swapped — the wrong cookie on auto-rejoin, and "close previous client" killing the other account's window
 - **Untracked clients:** attribution was a single attempt 4 s after launch; a slow client start meant it was never tracked at all — no Anti-AFK, no crash watchdog, no RAM cap, and nothing said so. Now retried for 24 s.
 - **PID reuse:** tracked PIDs were never re-validated, so a recycled PID could have the RAM monitor kill, Anti-AFK type into, or the scheduler close an unrelated application

@@ -45,9 +45,6 @@ public static class PerformanceProfiles
     public static int FpsCap(string? id, UltraLowOptions options)
         => id == UltraLowAfk && options.FpsCap > 0 ? Math.Clamp(options.FpsCap, 5, 1000) : 0;
 
-    /// <summary>Whether the profile minimizes its clients once they are in game.</summary>
-    public static bool Minimizes(string? id, UltraLowOptions options) => id == UltraLowAfk && options.MinimizeWhenInGame;
-
     /// <summary>
     /// Undoes what an earlier profile launch left in the shared flag file. For every flag the profile
     /// wrote that this launch does not set itself, and whose value in the file is still exactly what
@@ -84,6 +81,4 @@ public sealed class UltraLowOptions
 
     /// <summary>Frame-rate cap; 0 leaves the normal cap alone.</summary>
     public int FpsCap { get; set; } = 15;
-
-    public bool MinimizeWhenInGame { get; set; } = true;
 }

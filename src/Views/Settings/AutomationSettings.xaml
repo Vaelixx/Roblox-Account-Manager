@@ -44,6 +44,18 @@
                 <ctl:SettingItem Title="{DynamicResource Str.AntiAfk.Key}" Description="{DynamicResource Str.AntiAfk.Key.Desc}" IsEnabled="{Binding AntiAfkEnabled}">
                     <ComboBox Width="120" ItemsSource="{Binding AntiAfkKeys}" SelectedItem="{Binding AntiAfkKey}" />
                 </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.AntiAfk.Presses}" Description="{DynamicResource Str.AntiAfk.Presses.Desc}" IsEnabled="{Binding AntiAfkEnabled}">
+                    <TextBox Style="{StaticResource Input.Number}" Text="{Binding AntiAfkPresses}" />
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.AntiAfk.Hold}" Description="{DynamicResource Str.AntiAfk.Hold.Desc}" IsEnabled="{Binding AntiAfkEnabled}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox Style="{StaticResource Input.Number}" Text="{Binding AntiAfkFocusSeconds}" />
+                        <TextBlock Text="{DynamicResource Str.Common.Unit.Seconds}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.AntiAfk.Loading}" Description="{DynamicResource Str.AntiAfk.Loading.Desc}" IsEnabled="{Binding AntiAfkEnabled}">
+                    <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AntiAfkHelpLoading}" />
+                </ctl:SettingItem>
                 <ctl:SettingItem Title="{DynamicResource Str.AntiAfk.Focus}" Description="{DynamicResource Str.AntiAfk.Focus.Desc}" IsEnabled="{Binding AntiAfkEnabled}">
                     <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AntiAfkRestoreFocus}" />
                 </ctl:SettingItem>
@@ -101,6 +113,13 @@
                         <TextBox Style="{StaticResource Input.Number}" Text="{Binding RamLimitMb}" IsEnabled="{Binding AutoCloseOnHighRam}" />
                         <TextBlock Text="MB" Style="{StaticResource Text.Caption}" Margin="8,0,16,0" VerticalAlignment="Center" />
                         <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding AutoCloseOnHighRam}" />
+                    </StackPanel>
+                </ctl:SettingItem>
+                <ctl:SettingItem Title="{DynamicResource Str.Ram.Growth.Title}" Description="{DynamicResource Str.Ram.Growth.Desc}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox Style="{StaticResource Input.Number}" Text="{Binding RamGrowthFactor}" IsEnabled="{Binding RestartOnRamGrowth}" />
+                        <TextBlock Text="×" Style="{StaticResource Text.Caption}" Margin="8,0,16,0" VerticalAlignment="Center" />
+                        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding RestartOnRamGrowth}" />
                     </StackPanel>
                 </ctl:SettingItem>
                 <ctl:SettingItem Title="{DynamicResource Str.Ram.Trim.Title}" Description="{DynamicResource Str.Ram.Trim.Desc}">

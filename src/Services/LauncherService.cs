@@ -173,6 +173,7 @@ public static class LauncherService
         var settings = SettingsService.Current;
         EnsureMultiInstance(settings.EnableMultiInstance);
         ApplyGraphics(settings, acc, profile);
+        if (settings.ResizeClientWindows) RobloxClientSettingsService.WriteWindowed();
 
         string tracker = EnsureTrackerId(acc);
 
@@ -214,6 +215,10 @@ public static class LauncherService
             + $"+browsertrackerid:{tracker}"
             + "+robloxLocale:en_us+gameLocale:en_us+channel:+LaunchExp:InApp";
 
+        // A client that recreated Roblox's single-instance event since the last timed sweep would
+        // otherwise receive this launch (another account's ticket), and the new process would exit.
+        RobloxSingletonService.SweepBeforeLaunch();
+
         try
         {
             // Only clients that appear after this instant can belong to this launch. Backdated a
@@ -233,10 +238,7 @@ public static class LauncherService
                 try { await PresenceService.PollNowAsync(); } catch { }
             });
 
-            // What presence said before this launch: a stale "in game" from the previous session must
-            // not count as this client having loaded (see MinimizeWhenInGameAsync).
-            string? gameBefore = acc.Presence == PresenceStatus.InGame ? acc.GameId ?? "" : null;
-            var client = Task.Run(() => AttributeClientAsync(acc, target, profile, launchedAt, gameBefore, origin));
+            var client = Task.Run(() => AttributeClientAsync(acc, target, profile, launchedAt, origin));
 
             // Off the launch's own path: a plugin that starts a launch from this event would otherwise wait
             // for the gate this launch holds, and every launch in the app would hang.
@@ -261,7 +263,7 @@ public static class LauncherService
     /// exist, and a single miss meant no Anti-AFK, crash watchdog or RAM cap for it.
     /// </summary>
     private static async Task<ProcessRegistry.ProcessToken?> AttributeClientAsync(Account acc, JoinTarget target, string? profile,
-        DateTime launchedAt, string? gameBefore = null, string? origin = null)
+        DateTime launchedAt, string? origin = null)
     {
         await Task.Delay(4000);
 
@@ -280,43 +282,31 @@ public static class LauncherService
         if (token is { } found)
         {
             _lastProcess[acc.UserId] = found;
-            if (PerformanceProfiles.Minimizes(profile, SettingsService.Current.UltraLowAfk))
-                _ = MinimizeWhenInGameAsync(acc, found, gameBefore);
+            if (SettingsService.Current.ResizeClientWindows) _ = PlaceWindowAsync(found);
         }
         else DiagnosticsService.Warn("launcher", $"No client could be attributed to {acc.DisplayNameOrUser} within 34s of launch");
         return token;
     }
 
     /// <summary>
-    /// Minimizes a freshly launched client once it has joined its game. Roblox stops loading while
-    /// its window is minimized, so minimizing on the splash screen left the client stuck until someone
-    /// restored it. "Joined" is the account's presence turning In Game — a fresh value, not one left
-    /// over from the session before — plus a short settle. Without that signal (presence switched
-    /// off, or never reported within 5 minutes) the client is left as it is.
+    /// Sizes and places a new client's window as soon as it has one, and once more a minute later:
+    /// the client can resize itself as it finishes loading. Unlike minimizing, a small window keeps
+    /// loading and rendering, so the client stays connected.
     /// </summary>
-    /// <param name="gameBefore">Game id presence reported before the launch when it already said In Game; null otherwise.</param>
-    private static async Task MinimizeWhenInGameAsync(Account acc, ProcessRegistry.ProcessToken client, string? gameBefore)
+    private static async Task PlaceWindowAsync(ProcessRegistry.ProcessToken client)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(5);
-        DateTime? windowSince = null;
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(2);
         while (DateTime.UtcNow < deadline)
         {
-            await Task.Delay(3000);
+            await Task.Delay(1000);
             if (!ProcessRegistry.All.Any(t => ProcessRegistry.TokenFor(t) == client)) return;   // closed meanwhile
-            if (ProcessRegistry.WindowHandle(client) == IntPtr.Zero) continue;                 // still starting
-            windowSince ??= DateTime.UtcNow;
-
-            if (acc.Presence != PresenceStatus.InGame) continue;
-            // In game already before the launch and still the same server: presence may simply not
-            // have caught up. Give loading a generous minute and a half instead of trusting it.
-            bool fresh = gameBefore == null || (acc.GameId ?? "") != gameBefore;
-            var settle = fresh ? TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(90);
-            if (DateTime.UtcNow - windowSince.Value < settle) continue;
-
-            InstanceControlService.Minimize(client);
-            return;
+            if (InstanceControlService.ShrinkAndPlace(client, place: true))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(60));
+                InstanceControlService.ShrinkAndPlace(client, place: false);
+                return;
+            }
         }
-        DiagnosticsService.Log("launcher", $"Left {acc.DisplayNameOrUser}'s client open: it never showed as in game (minimizing earlier stops Roblox loading)");
     }
 
     /// <summary>Options for <see cref="LaunchBatchAsync"/>. <c>Origin</c> tags every client the batch starts.</summary>
@@ -436,6 +426,7 @@ public static class LauncherService
         string uri = "roblox-player:1+launchmode:app"
             + $"+gameinfo:{ticket}+launchtime:{launchTime}+browsertrackerid:{tracker}"
             + "+robloxLocale:en_us+gameLocale:en_us+channel:+LaunchExp:InApp";
+        RobloxSingletonService.SweepBeforeLaunch();
         try
         {
             DateTime launchedAt = DateTime.Now.AddSeconds(-2);

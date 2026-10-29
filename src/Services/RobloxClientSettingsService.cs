@@ -71,6 +71,18 @@ public static class RobloxClientSettingsService
     public static bool WriteFramerateCap(int cap)
     {
         if (cap == 0) return false;   // negative is Roblox's own "default"; restoring it after a profile is legitimate
+        return WriteSetting("int", "FramerateCap", cap.ToString(System.Globalization.CultureInfo.InvariantCulture), "the frame-rate cap");
+    }
+
+    /// <summary>
+    /// Turns the client's "Fullscreen" setting off, so new clients open as normal windows. A client
+    /// that opens fullscreen (or borderless) and is then shrunk to a small window renders glitchy;
+    /// one fullscreen toggle in game saves the setting for every client after it.
+    /// </summary>
+    public static bool WriteWindowed() => WriteSetting("bool", "Fullscreen", "false", "the windowed setting");
+
+    private static bool WriteSetting(string type, string name, string value, string what)
+    {
         string? file = SettingsFile();
         if (file == null) return false;
 
@@ -80,11 +92,10 @@ public static class RobloxClientSettingsService
             var props = doc.XPathSelectElement("//Item[@class='UserGameSettings']/Properties");
             if (props == null) return false;
 
-            var el = props.Elements("int").FirstOrDefault(e => (string?)e.Attribute("name") == "FramerateCap");
-            string value = cap.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var el = props.Elements(type).FirstOrDefault(e => (string?)e.Attribute("name") == name);
             if (el == null)
             {
-                props.Add(new XElement("int", new XAttribute("name", "FramerateCap"), value));
+                props.Add(new XElement(type, new XAttribute("name", name), value));
             }
             else
             {
@@ -103,7 +114,7 @@ public static class RobloxClientSettingsService
         }
         catch (Exception ex)
         {
-            DiagnosticsService.Warn("client-settings", "Could not write the frame-rate cap", ex);
+            DiagnosticsService.Warn("client-settings", $"Could not write {what}", ex);
             try { File.Delete(file + ".ram.tmp"); } catch { }
             return false;
         }

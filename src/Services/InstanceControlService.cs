@@ -282,6 +282,67 @@ public static class InstanceControlService
         return moved;
     }
 
+    /// <summary>Smallest size asked for in "smallest" mode; Roblox raises it to its own minimum if that is larger.</summary>
+    private const int SmallestWidth = 240, SmallestHeight = 160;
+
+    /// <summary>
+    /// Resizes one client to the size in settings (smallest allowed by default) and, with
+    /// <paramref name="place"/>, moves it to the first spot no other client window occupies
+    /// (<see cref="WindowLayout"/>). Never activates it. False while it has no normal window yet.
+    /// </summary>
+    public static bool ShrinkAndPlace(ProcessRegistry.ProcessToken client, bool place)
+    {
+        try
+        {
+            var hWnd = ProcessRegistry.WindowHandle(client);
+            if (hWnd == IntPtr.Zero) return false;
+            if (Win32.IsIconic(hWnd)) return true;   // minimized by hand: leave it
+
+            // No title bar: the splash screen, or a fullscreen / borderless client. Shrinking that leaves
+            // a glitchy small window, so wait (false) for the normal window. Launches turn Roblox's
+            // Fullscreen setting off, so a client stays fullscreen only if it was switched in game.
+            if ((Win32.GetWindowLong(hWnd, Win32.GWL_STYLE) & Win32.WS_CAPTION) != Win32.WS_CAPTION) return false;
+
+            // Maximized: restore it to a normal window first, or it keeps its maximized state at the small size.
+            if (Win32.IsZoomed(hWnd)) Win32.ShowWindow(hWnd, Win32.SW_SHOWNOACTIVATE);
+
+            var s = SettingsService.Current;
+            int w = s.ClientWindowWidth > 0 ? s.ClientWindowWidth : SmallestWidth;
+            int h = s.ClientWindowHeight > 0 ? s.ClientWindowHeight : SmallestHeight;
+            Win32.SetWindowPos(hWnd, IntPtr.Zero, 0, 0, w, h, Win32.SWP_NOMOVE | Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE);
+            if (!place) return true;
+
+            // The size the window really took (it may enforce a larger minimum).
+            if (Win32.GetWindowRect(hWnd, out var r)) { w = r.Right - r.Left; h = r.Bottom - r.Top; }
+
+            var others = new List<(int X, int Y)>();
+            foreach (var t in ProcessRegistry.All)
+            {
+                var token = ProcessRegistry.TokenFor(t);
+                if (token == client) continue;
+                var other = ProcessRegistry.WindowHandle(token);
+                if (other != IntPtr.Zero && !Win32.IsIconic(other) && Win32.GetWindowRect(other, out var o)) others.Add((o.Left, o.Top));
+            }
+
+            var (x, y) = WindowLayout.FirstFreeCell(WorkArea(), w, h, others);
+            Win32.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private static WindowLayout.Rect WorkArea()
+    {
+        try
+        {
+            if (Win32.SystemParametersInfo(Win32.SPI_GETWORKAREA, 0, out var r, 0) && r.Right > r.Left && r.Bottom > r.Top)
+                return new WindowLayout.Rect(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+        }
+        catch { }
+        var (sw, sh) = ScreenSize();
+        return new WindowLayout.Rect(0, 0, sw, sh);
+    }
+
     /// <summary>
     /// Minimizes one client without taking focus from whatever the user is doing. False while it has
     /// no window yet (still on the splash screen) or after it exited.

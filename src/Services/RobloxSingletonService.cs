@@ -269,6 +269,19 @@ public static class RobloxSingletonService
     }
 
     /// <summary>
+    /// Sweeps right now, waiting briefly for a sweep already under way. Runs just before every launch:
+    /// a client that recreated its event since the last timed sweep would otherwise receive the new
+    /// launch (with another account's ticket) and the new process would exit within seconds.
+    /// </summary>
+    public static void SweepBeforeLaunch()
+    {
+        var s = SettingsService.Current;
+        if (!s.EnableMultiInstance || !s.CloseSingletonEvent) return;
+        for (int i = 0; i < 20 && Volatile.Read(ref _sweeping) != 0; i++) Thread.Sleep(100);
+        try { Sweep(force: true); } catch { }
+    }
+
+    /// <summary>
     /// Closes every <c>ROBLOX_singletonEvent</c> handle held by a running Roblox process.
     /// Cheap when nothing changed: unless <paramref name="force"/> is set, processes already
     /// swept are skipped until <see cref="ForcedSweepInterval"/> elapses.
