@@ -26,6 +26,8 @@ public sealed class ClientRow
     public string Memory { get; init; } = "";
     public bool IsExternal { get; init; }
     public bool HasWindow { get; init; }
+    /// <summary>One of an account's clients: it can be relaunched into the same game.</summary>
+    public bool CanRestart => Account != null && !IsExternal;
 }
 
 /// <summary>A recorded session in the activity list.</summary>
@@ -61,6 +63,7 @@ public class DashboardViewModel : ObservableObject
         CloseAllCommand = new RelayCommand(_ => CloseAll());
         FocusClientCommand = new RelayCommand(p => { if (p is ClientRow row && !InstanceControlService.Focus(row.Token)) _main.SetStatus(L.T("Clients.NoWindow")); });
         CloseClientCommand = new RelayCommand(p => { if (p is ClientRow row) _ = Task.Run(() => { InstanceControlService.Close(row.Token); }); });
+        RestartClientCommand = new AsyncRelayCommand(p => RestartClientAsync(p as ClientRow));
         MinimizeClientCommand = new RelayCommand(p => { if (p is ClientRow row && !InstanceControlService.Minimize(row.Token)) _main.SetStatus(L.T("Clients.NoWindow")); });
         CancelRejoinCommand = new RelayCommand(p => { if (p is long id) { WatchdogService.CancelRejoin(id); RefreshClients(); } });
         OpenAccountCommand = new RelayCommand(p => { if (p is Account a) _main.ShowAccount(a); });
@@ -99,6 +102,16 @@ public class DashboardViewModel : ObservableObject
         if (!d.CheckAccess()) { d.BeginInvoke(new Action(QueueRecompute)); return; }
         _recompute.Stop();
         _recompute.Start();
+    }
+
+    /// <summary>Closes one client and relaunches it into the same game, the way a scheduled restart does.</summary>
+    private async Task RestartClientAsync(ClientRow? row)
+    {
+        if (row == null || ProcessRegistry.All.FirstOrDefault(t => ProcessRegistry.TokenFor(t) == row.Token) is not { } client) return;
+        _main.SetStatus(L.T("Automation.Schedule.Restarting"));
+        int back = await WatchdogService.RestartAllAsync(new[] { client });
+        _main.SetStatus(back > 0 ? L.N("Status.RestartedClients", back) : L.T("Clients.RestartFailed"));
+        RefreshClients();
     }
 
     public void OnShown()
@@ -294,6 +307,7 @@ public class DashboardViewModel : ObservableObject
     public RelayCommand CloseAllCommand { get; }
     public RelayCommand FocusClientCommand { get; }
     public RelayCommand CloseClientCommand { get; }
+    public AsyncRelayCommand RestartClientCommand { get; }
     public RelayCommand MinimizeClientCommand { get; }
     public RelayCommand CancelRejoinCommand { get; }
     public RelayCommand OpenAccountCommand { get; }

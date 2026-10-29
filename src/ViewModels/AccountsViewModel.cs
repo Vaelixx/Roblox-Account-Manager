@@ -20,7 +20,7 @@ public class AccountsViewModel : ObservableObject
     /// <summary>The list as shown: filtered, sorted and (optionally) grouped.</summary>
     public ListCollectionView AccountsView { get; }
 
-    public static readonly string[] StatusFilters = { "All", "Online", "InGame", "Offline", "Attention", "Favorites" };
+    public static readonly string[] StatusFilters = { "All", "Online", "InGame", "Offline", "Attention", "Favorites", "Running" };
     public static readonly string[] SortModes = { "Name", "Status", "Recent", "Robux", "Playtime" };
 
     public AccountsViewModel(AccountStore store, MainViewModel main)
@@ -34,7 +34,7 @@ public class AccountsViewModel : ObservableObject
             IsLiveSorting = true,
             IsLiveGrouping = true,
         };
-        foreach (var p in new[] { nameof(Account.Presence), nameof(Account.NeedsAttention), nameof(Account.IsFavorite), nameof(Account.Group) })
+        foreach (var p in new[] { nameof(Account.Presence), nameof(Account.NeedsAttention), nameof(Account.IsFavorite), nameof(Account.Group), nameof(Account.RunningClients) })
             AccountsView.LiveFilteringProperties.Add(p);
         foreach (var p in new[] { nameof(Account.Presence), nameof(Account.IsFavorite), nameof(Account.Group), nameof(Account.DisplayNameOrUser), nameof(Account.Robux) })
             AccountsView.LiveSortingProperties.Add(p);
@@ -92,6 +92,7 @@ public class AccountsViewModel : ObservableObject
         RemoveCommand = new RelayCommand(_ => Remove());
         CopyCookieCommand = new RelayCommand(_ => CopyCookie());
         CopyUserIdCommand = new RelayCommand(_ => CopyUserId());
+        CloseClientsCommand = new AsyncRelayCommand(CloseClientsAsync);
         ToggleFavoriteCommand = new RelayCommand(p => ToggleFavorite(p as Account ?? _selected));
         SetGroupCommand = new RelayCommand(_ => SetGroupForTargets());
         SetColorCommand = new RelayCommand(p => SetColor(p as string));
@@ -123,6 +124,9 @@ public class AccountsViewModel : ObservableObject
         {
             case nameof(Account.IsChecked):
                 RaiseChecked();
+                break;
+            case nameof(Account.RunningClients):
+                RaiseCounts();
                 break;
             case nameof(Account.Presence):
                 RaiseCounts();
@@ -300,6 +304,8 @@ public class AccountsViewModel : ObservableObject
             "Offline" => !a.IsOnline,
             "Attention" => a.NeedsAttention,
             "Favorites" => a.IsFavorite,
+            // A client the manager tracks, whatever presence says (an account can hide its game).
+            "Running" => a.IsRunning,
             _ => true,
         };
         if (!statusOk) return false;
@@ -333,6 +339,7 @@ public class AccountsViewModel : ObservableObject
     public int CountInGame => _store.Accounts.Count(a => InGroupScope(a) && a.Presence == PresenceStatus.InGame);
     public int CountOffline => _store.Accounts.Count(a => InGroupScope(a) && !a.IsOnline);
     public int CountAttention => _store.Accounts.Count(a => InGroupScope(a) && a.NeedsAttention);
+    public int CountRunning => _store.Accounts.Count(a => InGroupScope(a) && a.IsRunning);
 
     private bool InGroupScope(Account a) => _groupFilter == null || a.Group.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase);
 
@@ -343,6 +350,7 @@ public class AccountsViewModel : ObservableObject
         OnPropertyChanged(nameof(CountInGame));
         OnPropertyChanged(nameof(CountOffline));
         OnPropertyChanged(nameof(CountAttention));
+        OnPropertyChanged(nameof(CountRunning));
         OnPropertyChanged(nameof(IsStoreEmpty));
         OnPropertyChanged(nameof(IsFilterEmpty));
         OnPropertyChanged(nameof(VisibleCount));
@@ -434,6 +442,7 @@ public class AccountsViewModel : ObservableObject
     public RelayCommand RemoveCommand { get; }
     public RelayCommand CopyCookieCommand { get; }
     public RelayCommand CopyUserIdCommand { get; }
+    public AsyncRelayCommand CloseClientsCommand { get; }
     public RelayCommand ToggleFavoriteCommand { get; }
     public RelayCommand SetGroupCommand { get; }
     public RelayCommand SetColorCommand { get; }
@@ -575,6 +584,15 @@ public class AccountsViewModel : ObservableObject
             return;
         _store.Remove(targets);
         _main.SetStatus(L.T("Remove.Done", names));
+    }
+
+    /// <summary>Closes the Roblox clients of the clicked or ticked accounts (and cancels their pending rejoins).</summary>
+    private async Task CloseClientsAsync()
+    {
+        var ids = Targets().Select(a => a.UserId).ToList();
+        if (ids.Count == 0) { _main.SetStatus(L.T("Status.SelectFirst")); return; }
+        int closed = await Task.Run(() => ids.Sum(InstanceControlService.CloseFor));
+        _main.SetStatus(closed > 0 ? L.N("Status.ClosedClients", closed) : L.T("Status.NoClients"));
     }
 
     private void CopyCookie()

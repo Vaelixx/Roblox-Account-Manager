@@ -216,6 +216,11 @@
                                                                 ToolTip="{DynamicResource Str.Clients.Minimize}" IsEnabled="{Binding HasWindow}"
                                                                 Command="{Binding DataContext.MinimizeClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}" />
+                                                        <Button Style="{StaticResource Btn.Icon}" Width="30" Height="30" ctl:Ui.Icon="{StaticResource Icon.Refresh}"
+                                                                ToolTip="{DynamicResource Str.Clients.Restart}"
+                                                                Visibility="{Binding CanRestart, Converter={StaticResource BoolToVis}}"
+                                                                Command="{Binding DataContext.RestartClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}" />
                                                         <Button Style="{StaticResource Btn.Icon}" Width="30" Height="30" ctl:Ui.Icon="{StaticResource Icon.Close}"
                                                                 ToolTip="{DynamicResource Str.Clients.Close}"
                                                                 Command="{Binding DataContext.CloseClientCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

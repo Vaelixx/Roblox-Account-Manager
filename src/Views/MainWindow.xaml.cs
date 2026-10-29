@@ -29,6 +29,16 @@ public partial class MainWindow : Window
         var s = SettingsService.Current;
         if (s.WindowWidth >= MinWidth) Width = s.WindowWidth;
         if (s.WindowHeight >= MinHeight) Height = s.WindowHeight;
+        // Back where it was, unless that spot is off every screen now (a monitor was unplugged).
+        if (s.WindowLeft is double left && s.WindowTop is double top
+            && left >= SystemParameters.VirtualScreenLeft && top >= SystemParameters.VirtualScreenTop
+            && left + 100 <= SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth
+            && top + 50 <= SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = left;
+            Top = top;
+        }
         if (s.WindowMaximized) WindowState = WindowState.Maximized;
 
         ApplySidebarWidth();
@@ -306,7 +316,7 @@ public partial class MainWindow : Window
     {
         var s = SettingsService.Current;
         s.WindowMaximized = WindowState == WindowState.Maximized;
-        if (WindowState == WindowState.Normal) { s.WindowWidth = Width; s.WindowHeight = Height; }
+        if (WindowState == WindowState.Normal) { s.WindowWidth = Width; s.WindowHeight = Height; s.WindowLeft = Left; s.WindowTop = Top; }
         SettingsService.Save();
         _vm.Store.Save();
 

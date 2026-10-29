@@ -236,6 +236,9 @@ public class AppSettings
     public double WindowWidth { get; set; } = 1280;
     public double WindowHeight { get; set; } = 800;
     public bool WindowMaximized { get; set; } = false;
+    /// <summary>Where the window was last closed; null until then (the window starts centred).</summary>
+    public double? WindowLeft { get; set; }
+    public double? WindowTop { get; set; }
 
     // ---- v1.x fields, read for migration only ----
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool UnlockFps { get; set; }

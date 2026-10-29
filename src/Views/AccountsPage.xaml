@@ -115,6 +115,10 @@
                                   Command="{Binding PlacementTarget.Tag.CopyUserIdCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
                             <MenuItem.Icon><Path Data="{StaticResource Icon.Hash}" Style="{StaticResource MenuIcon}" /></MenuItem.Icon>
                         </MenuItem>
+                        <MenuItem Header="{DynamicResource Str.Accounts.Menu.CloseClients}" Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}"
+                                  Command="{Binding PlacementTarget.Tag.CloseClientsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                            <MenuItem.Icon><Path Data="{StaticResource Icon.XCircle}" Style="{StaticResource MenuIcon}" /></MenuItem.Icon>
+                        </MenuItem>
                         <Separator />
                         <MenuItem Header="{DynamicResource Str.Accounts.Menu.Remove}" Foreground="{DynamicResource DangerBrush}"
                                   Command="{Binding PlacementTarget.Tag.RemoveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
@@ -302,6 +306,10 @@
                              Visibility="{Binding CountAttention, Converter={StaticResource PositiveToVis}}" />
                 <RadioButton GroupName="status" Style="{StaticResource Chip}" Content="{DynamicResource Str.Accounts.Filter.Favorites}"
                              IsChecked="{Binding StatusFilter, Converter={StaticResource EqualsToBool}, ConverterParameter=Favorites}" />
+                <RadioButton GroupName="status" Style="{StaticResource Chip}" Content="{DynamicResource Str.Accounts.Filter.Running}"
+                             ctl:Ui.Badge="{Binding CountRunning}"
+                             IsChecked="{Binding StatusFilter, Converter={StaticResource EqualsToBool}, ConverterParameter=Running}"
+                             Visibility="{Binding CountRunning, Converter={StaticResource PositiveToVis}}" />
             </WrapPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
