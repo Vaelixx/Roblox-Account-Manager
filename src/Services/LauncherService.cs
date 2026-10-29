@@ -153,6 +153,17 @@ public static class LauncherService
     }
 
     /// <summary>
+    /// Runs <paramref name="action"/> once no launch is in flight: by then every launch so far has claimed its
+    /// own client, so an unclaimed client found inside can't be another account's that is still starting.
+    /// </summary>
+    public static async Task<T> WhenNoLaunchAsync<T>(Func<T> action)
+    {
+        await _launchGate.WaitAsync();
+        try { return action(); }
+        finally { _launchGate.Release(); }
+    }
+
+    /// <summary>
     /// Frame-rate cap, FastFlags, the profile and this account's own overrides, written before the client
     /// starts: it reads them once, at startup. A launch without a profile puts back what an earlier profile
     /// launch changed.
@@ -217,7 +228,7 @@ public static class LauncherService
 
         // A client that recreated Roblox's single-instance event since the last timed sweep would
         // otherwise receive this launch (another account's ticket), and the new process would exit.
-        RobloxSingletonService.SweepBeforeLaunch();
+        await Task.Run(RobloxSingletonService.SweepBeforeLaunch);   // off the UI thread: it can wait up to 2 s for a running sweep
 
         try
         {
@@ -426,7 +437,7 @@ public static class LauncherService
         string uri = "roblox-player:1+launchmode:app"
             + $"+gameinfo:{ticket}+launchtime:{launchTime}+browsertrackerid:{tracker}"
             + "+robloxLocale:en_us+gameLocale:en_us+channel:+LaunchExp:InApp";
-        RobloxSingletonService.SweepBeforeLaunch();
+        await Task.Run(RobloxSingletonService.SweepBeforeLaunch);   // off the UI thread: it can wait up to 2 s for a running sweep
         try
         {
             DateTime launchedAt = DateTime.Now.AddSeconds(-2);

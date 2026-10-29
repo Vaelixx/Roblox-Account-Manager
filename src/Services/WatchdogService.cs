@@ -204,17 +204,34 @@ public static class WatchdogService
         // one is the real client (the first process handed over to it). Rejoining here launched a
         // second client next to it, seconds after the first rejoin, and one of them was then kicked
         // with "launched from a different device".
+        // Looked for inside the launch gate: another account's launch still in flight has an unclaimed
+        // client too, and taking that one put this account's name on the other account's window.
         if (acc != null && t.Uptime < TimeSpan.FromMinutes(1))
         {
             DateTime? after = t.StartTimeLocal == default ? null : t.StartTimeLocal;
-            int successor = ProcessRegistry.RegisterNewest(acc, t.Target, t.Profile, after, t.Origin);
-            if (successor != 0)
+            _ = Task.Run(async () =>
             {
-                DiagnosticsService.Log("watchdog", $"{t.Alias}'s client pid {t.Pid} exited after {(int)t.Uptime.TotalSeconds}s; following its successor pid {successor} instead of rejoining");
-                return;
-            }
+                try
+                {
+                    int successor = await LauncherService.WhenNoLaunchAsync(
+                        () => ProcessRegistry.RegisterNewest(acc, t.Target, t.Profile, after, t.Origin));
+                    if (successor != 0)
+                    {
+                        DiagnosticsService.Log("watchdog", $"{t.Alias}'s client pid {t.Pid} exited after {(int)t.Uptime.TotalSeconds}s; following its successor pid {successor} instead of rejoining");
+                        return;
+                    }
+                    HandleExit(t, acc);
+                }
+                catch (Exception ex) { DiagnosticsService.Warn("watchdog", $"Handling {t.Alias}'s client exit failed", ex); }
+            });
+            return;
         }
+        HandleExit(t, acc);
+    }
 
+    /// <summary>The part of an unexpected exit that reports it and books the rejoin.</summary>
+    private static void HandleExit(ProcessRegistry.Tracked t, Account? acc)
+    {
         var s = SettingsService.Current;
         if (!s.WatchdogEnabled) return;
         DiagnosticsService.Log("watchdog", $"{t.Alias}'s client pid {t.Pid} exited after {(int)t.Uptime.TotalMinutes} min {t.Uptime.Seconds} s");
@@ -571,7 +588,8 @@ public static class WatchdogService
         var jobs = new List<(Account Acc, ProcessRegistry.Tracked T)>();
         foreach (var t in clients.Where(t => !t.IsExternal && t.UserId > 0 && !(t.Target.Kind == JoinKind.Place && t.Target.PlaceId <= 0)))
             if (_accountLookup?.Invoke(t.UserId) is { } acc && !string.IsNullOrEmpty(acc.Cookie)) jobs.Add((acc, t));
-        if (jobs.Count == 0) return 0;
+        // Locked, nothing could be relaunched: closing first would just leave every client closed.
+        if (jobs.Count == 0 || LockService.IsLocked) return 0;
 
         DiagnosticsService.Log("watchdog", $"Scheduled restart of {jobs.Count} client(s)");
         var closed = new List<(Account Acc, ProcessRegistry.Tracked T)>();
