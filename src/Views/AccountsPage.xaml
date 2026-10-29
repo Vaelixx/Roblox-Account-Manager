@@ -380,7 +380,8 @@
                              VirtualizingPanel.VirtualizationMode="Recycling"
                              PreviewMouseLeftButtonDown="AccountsList_PreviewMouseLeftButtonDown"
                              MouseDoubleClick="AccountsList_MouseDoubleClick"
-                             ContextMenuOpening="AccountsList_ContextMenuOpening">
+                             ContextMenuOpening="AccountsList_ContextMenuOpening"
+                             ContextMenuClosing="AccountsList_ContextMenuClosing">
                         <ListBox.Style>
                             <Style TargetType="ListBox" BasedOn="{StaticResource PlainList}">
                                 <Setter Property="ItemTemplate" Value="{StaticResource AccountRow}" />

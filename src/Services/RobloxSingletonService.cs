@@ -277,7 +277,8 @@ public static class RobloxSingletonService
     {
         var s = SettingsService.Current;
         if (!s.EnableMultiInstance || !s.CloseSingletonEvent) return;
-        for (int i = 0; i < 20 && Volatile.Read(ref _sweeping) != 0; i++) Thread.Sleep(100);
+        // Off the UI thread (see LauncherService), so it can wait out a timed sweep: Sweep() returns at once while one runs.
+        for (int i = 0; i < 100 && Volatile.Read(ref _sweeping) != 0; i++) Thread.Sleep(100);
         try { Sweep(force: true); } catch { }
     }
 

@@ -56,7 +56,7 @@ public static class RobloxApi
 
         // A user editing a proxy creates a client per variant typed; keep the cache from growing
         // without bound. In-flight requests hold their own reference, so disposal is delayed.
-        if (_clients.Count > 16)
+        if (_clients.Count > 256)
         {
             var stale = _clients.Values.ToList();
             _clients.Clear();

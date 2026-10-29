@@ -174,7 +174,7 @@ public static class LauncherService
         {
             bool hadUndo = settings.ProfileUndo != null || settings.FpsCapBeforeProfile != null;
             FFlagsService.ApplyForLaunch(settings, acc, profile);
-            if (hadUndo || !string.IsNullOrEmpty(profile)) SettingsService.Save();
+            if (hadUndo || !string.IsNullOrEmpty(profile) || !string.IsNullOrWhiteSpace(acc.FFlags)) SettingsService.Save();
         }
         catch (Exception ex) { DiagnosticsService.Warn("launcher", "Could not apply graphics settings before launch", ex); }
     }

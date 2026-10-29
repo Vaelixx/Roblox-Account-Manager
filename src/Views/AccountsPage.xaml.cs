@@ -115,15 +115,28 @@ public partial class AccountsPage : UserControl
     {
         if (Vm is not { } vm) return;
         var origin = e.OriginalSource as DependencyObject;
-        if (FindAncestor<ListBoxItem>(origin) == null || FindAncestor<ButtonBase>(origin) != null) return;
-        if (vm.LaunchCommand.CanExecute(null)) vm.LaunchCommand.Execute(null);
+        if (FindAncestor<ListBoxItem>(origin) is not { DataContext: Account acc } || FindAncestor<ButtonBase>(origin) != null) return;
+        // The row that was double-clicked, not the ticked accounts (unless it is one of them).
+        vm.RowTarget = acc;
+        try { if (vm.LaunchCommand.CanExecute(null)) vm.LaunchCommand.Execute(null); }
+        finally { vm.RowTarget = null; }
     }
 
     private void AccountsList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        // Right-click selects the row under the pointer, so the menu always acts on what was clicked.
+        // Right-click selects the row under the pointer, so the menu always acts on what was clicked:
+        // that row alone when it isn't ticked, all ticked accounts when it is.
         if (FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject) is { } item)
+        {
             item.IsSelected = true;
+            if (Vm is { } vm) vm.RowTarget = item.DataContext as Account;
+        }
+    }
+
+    private void AccountsList_ContextMenuClosing(object sender, ContextMenuEventArgs e)
+    {
+        // A menu item's command runs after the menu has closed (at render priority): clear the row after it.
+        if (Vm is { } vm) Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle, () => vm.RowTarget = null);
     }
 
     // ---- menus -------------------------------------------------------------------

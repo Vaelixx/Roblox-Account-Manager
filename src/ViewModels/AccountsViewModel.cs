@@ -401,9 +401,16 @@ public class AccountsViewModel : ObservableObject
         OnPropertyChanged(nameof(CheckedText));
     }
 
-    /// <summary>Checked accounts when any are ticked, otherwise the selected one.</summary>
+    /// <summary>
+    /// A row double-clicked or right-clicked in the list (set by the view while its action runs). When it
+    /// isn't ticked, its actions act on it alone rather than on the ticked accounts.
+    /// </summary>
+    public Account? RowTarget { get; set; }
+
+    /// <summary>The clicked row (see <see cref="RowTarget"/>), else the checked accounts when any are ticked, else the selected one.</summary>
     private List<Account> Targets()
     {
+        if (RowTarget is { IsChecked: false } row) return new List<Account> { row };
         var ticked = _store.Accounts.Where(a => a.IsChecked).ToList();
         if (ticked.Count > 0) return ticked;
         return _selected != null ? new List<Account> { _selected } : new List<Account>();
@@ -566,7 +573,7 @@ public class AccountsViewModel : ObservableObject
         string names = targets.Count == 1 ? targets[0].DisplayNameOrUser : L.N("Accounts.Count", targets.Count);
         if (!DialogService.Confirm(L.T("Remove.Title"), L.T("Remove.Body", names), L.T("Remove.Action"), danger: true))
             return;
-        foreach (var a in targets) _store.Remove(a);
+        _store.Remove(targets);
         _main.SetStatus(L.T("Remove.Done", names));
     }
 

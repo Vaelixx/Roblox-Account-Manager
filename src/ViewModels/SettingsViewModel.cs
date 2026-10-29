@@ -559,7 +559,17 @@ public class SettingsViewModel : ObservableObject
     public bool AutoCloseOnHighRam { get => S.AutoCloseOnHighRam; set { S.AutoCloseOnHighRam = value; Persist(); OnPropertyChanged(); } }
     public int RamLimitMb { get => S.RamLimitMb; set { S.RamLimitMb = Math.Clamp(value, 256, 65536); Persist(); OnPropertyChanged(); } }
     public bool RestartOnRamGrowth { get => S.RestartOnRamGrowth; set { S.RestartOnRamGrowth = value; Persist(); RamMonitorService.Apply(); WatchdogService.Apply(); OnPropertyChanged(); } }
-    public double RamGrowthFactor { get => S.RamGrowthFactor; set { S.RamGrowthFactor = Math.Clamp(value, 1.2, 10); Persist(); OnPropertyChanged(); } }
+    /// <summary>Text, so "1,5" (German) and "1.5" both mean one and a half; a double binding read "1,5" as 15.</summary>
+    public string RamGrowthFactor
+    {
+        get => S.RamGrowthFactor.ToString("0.##", System.Globalization.CultureInfo.CurrentCulture);
+        set
+        {
+            if (double.TryParse(value?.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v))
+            { S.RamGrowthFactor = Math.Clamp(v, 1.2, 10); Persist(); }
+            OnPropertyChanged();
+        }
+    }
     public bool AutoTrimEnabled { get => S.AutoTrimEnabled; set { S.AutoTrimEnabled = value; Persist(); RamMonitorService.ApplyAutoTrim(); OnPropertyChanged(); } }
     public int AutoTrimMinutes { get => S.AutoTrimMinutes; set { S.AutoTrimMinutes = Math.Clamp(value, 5, 240); Persist(); RamMonitorService.ApplyAutoTrim(); OnPropertyChanged(); } }
     public RelayCommand TrimRamCommand { get; }
@@ -769,6 +779,7 @@ public class SettingsViewModel : ObservableObject
             _main.Accounts.RefreshMask();
             _main.Dashboard.RefreshMask();
             _main.Friends.RefreshMask();
+            _main.Servers.RefreshLocalized();   // its "Join as" list shows account names too
             OnPropertyChanged();
         }
     }
@@ -938,7 +949,7 @@ public class SettingsViewModel : ObservableObject
         ? L.T("Api.Status.On", S.WebApiPort)
         : L.T("Api.Status.Off");
 
-    public string WebApiEndpoints => $"GET  /ping\nGET  /accounts\nGET  /status?account=\nPOST /launch?account=&placeId=&jobId=\nPOST /close?account=\nGET  /cookie?account=";
+    public string WebApiEndpoints => $"GET  /ping\nGET  /accounts\nGET  /status?account=\nPOST /launch?account=&placeId=&jobId=\nPOST /close?account=\nPOST /preset?name=\nGET  /cookie?account=";
 
     public RelayCommand GenerateWebApiTokenCommand { get; }
     public RelayCommand CopyWebApiTokenCommand { get; }

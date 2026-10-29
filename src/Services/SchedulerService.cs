@@ -72,7 +72,7 @@ public static class SchedulerService
         try
         {
             var now = DateTime.Now;
-            var hhmm = now.ToString("HH:mm");
+            var hhmm = now.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);   // fi-FI and others write "09.05"
 
             // Snapshot: the settings UI can add/remove tasks while we enumerate. An
             // unhandled exception in a Timer callback would take down the whole process.

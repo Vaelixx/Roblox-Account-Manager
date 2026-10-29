@@ -109,6 +109,9 @@ public class DashboardViewModel : ObservableObject
         _clientTimer.Start();
     }
 
+    /// <summary>Another page is shown: stop the 5-second client refresh (it walks every client's process and window).</summary>
+    public void OnHidden() => _clientTimer.Stop();
+
     public void RefreshLocalized()
     {
         OnPropertyChanged(string.Empty);

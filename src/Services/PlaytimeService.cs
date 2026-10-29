@@ -42,6 +42,7 @@ public static class PlaytimeService
     private static readonly string FilePath = Paths.InData("playtime.json");
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
     private static readonly object _gate = new();
+    private static readonly object _saveGate = new();
 
     /// <summary>How long history is kept. Older sessions are dropped so the file stays small.</summary>
     private static readonly TimeSpan Retention = TimeSpan.FromDays(180);
@@ -264,15 +265,20 @@ public static class PlaytimeService
     {
         try
         {
-            string json;
-            lock (_gate) { Prune(); json = JsonSerializer.Serialize(_sessions, JsonOpts); }
+            // One writer at a time: two exits saving at once shared the .tmp file, and the loser's
+            // (possibly newer) snapshot was dropped.
+            lock (_saveGate)
+            {
+                string json;
+                lock (_gate) { Prune(); json = JsonSerializer.Serialize(_sessions, JsonOpts); }
 
-            Directory.CreateDirectory(Paths.DataDir);
-            // Same atomic staging as settings.json — a crash mid-write must not truncate the file.
-            string tmp = FilePath + ".tmp";
-            File.WriteAllText(tmp, json);
-            if (File.Exists(FilePath)) File.Replace(tmp, FilePath, null);
-            else File.Move(tmp, FilePath);
+                Directory.CreateDirectory(Paths.DataDir);
+                // Same atomic staging as settings.json — a crash mid-write must not truncate the file.
+                string tmp = FilePath + ".tmp";
+                File.WriteAllText(tmp, json);
+                if (File.Exists(FilePath)) File.Replace(tmp, FilePath, null);
+                else File.Move(tmp, FilePath);
+            }
         }
         catch (Exception ex) { Debug.WriteLine($"[Playtime] Could not write history: {ex.Message}"); }
     }

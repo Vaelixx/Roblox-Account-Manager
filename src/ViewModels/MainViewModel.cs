@@ -92,7 +92,7 @@ public class MainViewModel : ObservableObject
 
             if (value == Pages.Settings) Settings.OnShown();
             if (value == Pages.Friends) Friends.EnsureLoaded();
-            if (value == Pages.Overview) Dashboard.OnShown();
+            if (value == Pages.Overview) Dashboard.OnShown(); else Dashboard.OnHidden();
             if (value == Pages.Automation) Automation.OnShown();
             if (value == Pages.Servers)
             {

@@ -42,6 +42,8 @@ public class PresetItem : ObservableObject
         {
             string v = string.IsNullOrWhiteSpace(value) ? L.T("Automation.Preset.Untitled") : value.Trim();
             if (v == Model.Name) return;
+            // Schedules and the local API find a preset by name: two of the same name ran whichever came first.
+            v = AutomationViewModel.UniqueName(v, _owner.Presets.Where(p => p != this).Select(p => p.Name));
             string old = Model.Name;
             Model.Name = v;
             _owner.OnPresetRenamed(old, v);
@@ -387,13 +389,22 @@ public class ScheduleItem : ObservableObject
     public string? PresetName
     {
         get => string.IsNullOrEmpty(Model.PresetName) ? null : Model.PresetName;
-        set { Model.PresetName = value ?? ""; if (Model.PresetName.Length > 0) Model.Alias = ""; OnPropertyChanged(); OnPropertyChanged(nameof(Summary)); _owner.Persist(); }
+        set
+        {
+            // A ComboBox writes null back when its item disappears; a blank target means "every client" to a Restart task.
+            if (value is null) return;
+            Model.PresetName = value; if (Model.PresetName.Length > 0) Model.Alias = ""; OnPropertyChanged(); OnPropertyChanged(nameof(Summary)); _owner.Persist();
+        }
     }
 
     public Account? Account
     {
         get => _owner.Accounts.FirstOrDefault(a => Model.Alias.Length > 0 && PresetItem.Matches(a, Model.Alias));
-        set { Model.Alias = value?.Username ?? ""; if (Model.Alias.Length > 0) Model.PresetName = ""; OnPropertyChanged(); OnPropertyChanged(nameof(Summary)); _owner.Persist(); }
+        set
+        {
+            if (value is null) return;   // see PresetName
+            Model.Alias = value.Username; if (Model.Alias.Length > 0) Model.PresetName = ""; OnPropertyChanged(); OnPropertyChanged(nameof(Summary)); _owner.Persist();
+        }
     }
 
     public string PlaceIdText
@@ -695,7 +706,7 @@ public class AutomationViewModel : ObservableObject
         var model = new ScheduledTask
         {
             Name = UniqueName(L.T("Automation.Schedule.NewName"), Schedules.Select(s => s.Name)),
-            TimeOfDay = DateTime.Now.AddHours(1).ToString("HH:00"),
+            TimeOfDay = DateTime.Now.AddHours(1).ToString("HH:00", System.Globalization.CultureInfo.InvariantCulture),
             PresetName = SelectedPreset?.Name ?? Presets.FirstOrDefault()?.Name ?? "",
             PlaceId = SettingsService.Current.DefaultPlaceId,
             Enabled = true,
@@ -739,7 +750,7 @@ public class AutomationViewModel : ObservableObject
                 : item.Account is { } a ? new List<long> { a.UserId } : new List<long>();
             if (item.Model.Action == ScheduleAction.Restart)
             {
-                bool everyone = preset == null && item.Account == null;
+                bool everyone = string.IsNullOrWhiteSpace(item.Model.PresetName) && string.IsNullOrWhiteSpace(item.Model.Alias);
                 var clients = ProcessRegistry.All.Where(t => everyone || ids.Contains(t.UserId)).ToList();
                 _main.SetStatus(L.T("Automation.Schedule.Restarting"));
                 int back = await WatchdogService.RestartAllAsync(clients);
@@ -751,7 +762,7 @@ public class AutomationViewModel : ObservableObject
         }
     }
 
-    private static string UniqueName(string baseName, IEnumerable<string> existing)
+    internal static string UniqueName(string baseName, IEnumerable<string> existing)
     {
         var taken = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
         if (!taken.Contains(baseName)) return baseName;

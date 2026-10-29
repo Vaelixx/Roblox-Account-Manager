@@ -59,14 +59,16 @@ public static class FFlagsService
         var profileFlags = PerformanceProfiles.Flags(profile, s.UltraLowAfk);
         foreach (var kv in profileFlags)
             flags[kv.Key] = kv.Value;
-        foreach (var kv in ParseRaw(account?.FFlags))
+        var accountFlags = ParseRaw(account?.FFlags);
+        foreach (var kv in accountFlags)
             flags[kv.Key] = kv.Value;
 
         var undo = s.ProfileUndo;
         if (flags.Count == 0 && (undo == null || undo.Written.Count == 0)) return 0;
 
-        // What this launch's profile leaves in the file (an account override can win over a profile flag).
-        var written = profileFlags.Keys.ToDictionary(k => k, k => flags[k], StringComparer.Ordinal);
+        // What this launch's profile and account overrides leave in the file. Both are undone by the next
+        // launch that doesn't set them, or one account's flags stayed in effect for every account after it.
+        var written = profileFlags.Keys.Union(accountFlags.Keys).ToDictionary(k => k, k => flags[k], StringComparer.Ordinal);
         var previous = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
         var failed = new List<string>();
 

@@ -419,11 +419,15 @@ public class AccountStore
         return (added, failed);
     }
 
-    public void Remove(Account account)
+    public void Remove(Account account) => Remove(new[] { account });
+
+    /// <summary>Removes several accounts with a single save (each save re-encrypts the whole file).</summary>
+    public void Remove(IReadOnlyCollection<Account> accounts)
     {
-        Accounts.Remove(account);
+        foreach (var account in accounts) Accounts.Remove(account);
         Save();
-        AuditLogService.Log(AuditLogService.Category.Account, $"Account removed: {account.Username} (userId {account.UserId})");
+        foreach (var account in accounts)
+            AuditLogService.Log(AuditLogService.Category.Account, $"Account removed: {account.Username} (userId {account.UserId})");
     }
 
     public IEnumerable<string> Groups =>

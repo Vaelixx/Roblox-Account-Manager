@@ -230,9 +230,9 @@ public partial class App : Application
 
         // Presets and schedules resolve a stored account by alias first, then username, so renaming
         // the display name never breaks a saved preset or task.
-        Account? Resolve(string key) => vm.Store.Accounts.FirstOrDefault(a =>
-            string.Equals(a.Alias, key, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(a.Username, key, StringComparison.OrdinalIgnoreCase));
+        Account? Resolve(string key) =>
+            vm.Store.Accounts.FirstOrDefault(a => string.Equals(a.Alias, key, StringComparison.OrdinalIgnoreCase))
+            ?? vm.Store.Accounts.FirstOrDefault(a => string.Equals(a.Username, key, StringComparison.OrdinalIgnoreCase));
         PresetService.Init(Resolve);
         SchedulerService.Init(Resolve);
         SchedulerService.Start();
