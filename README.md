@@ -74,10 +74,12 @@ The full list, including what to know before updating, is in the [changelog](CHA
 
 **Automation**
 - Presets: launch a set of accounts into a game, a specific server, a private server or wherever a player is, with one click
-- Performance profiles: an Ultra-low AFK profile (low FPS cap, lowest graphics, optional minimize) per preset
-- Schedules: launch or close accounts at a time and on the days you pick, and close them again after a while
-- Anti-AFK with optional random timing per client, crash recovery that rejoins the same destination,
-  a force-close threshold and memory trimming
+- Performance profiles: an Ultra-low AFK profile (low FPS cap, lowest graphics) per preset, and small
+  side-by-side client windows that keep loading
+- Schedules: launch, close or restart accounts at a time and on the days you pick, and close them again after a while
+- Anti-AFK with optional random timing per client, crash and disconnect recovery (read from each client's own
+  Roblox log) that rejoins the same destination, restarts for clients that keep growing, a force-close
+  threshold and memory trimming
 - Global hotkeys, a command line (`--launch`), a local HTTP API and plugins
 
 **Look and feel**

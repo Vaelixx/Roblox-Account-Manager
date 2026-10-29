@@ -15,7 +15,11 @@ into the exe and shown in **What's new**, so a release no longer needs its own n
 
 ---
 
-## Unreleased
+## v2.3.0 — 2026-10-29
+
+Client recovery for long unattended runs, the likely cause of the "wrong account on the captcha"
+report, and a round of bug fixes and small conveniences. Thanks to **@sjschillinger** for the
+client-recovery pull request (#9) and to **@elia1578** for the detailed report (#10).
 
 ### Changed
 
@@ -45,6 +49,12 @@ into the exe and shown in **What's new**, so a release no longer needs its own n
 - **Help loading clients** (Anti-AFK, on by default): a client whose log shows it still loading a game
   after 45 seconds gets focus for a moment. Roblox in the background can stall mid-load, often after a
   reconnect, until its window is focused.
+- **Restart one client** from the Overview: closes it and relaunches it into the same game.
+- **"Running" filter** on the Accounts page: every account with a client the manager tracks, also
+  accounts that hide their game from others.
+- **Close Roblox** in an account's right-click menu closes that account's clients (or the ticked
+  accounts') and cancels their pending rejoins.
+- The window opens where you last closed it.
 
 ### Fixed
 
@@ -79,6 +89,38 @@ into the exe and shown in **What's new**, so a release no longer needs its own n
 - **Anti-AFK keeps retrying a window that won't take focus** every minute instead of going back to the
   full interval after three tries, which could leave more than 20 minutes between key presses. When
   Windows refuses the focus, it now tries once more after a no-op key press (F13).
+- **A captcha could show another account's name, and solving it ended in an HTTP error kick (#10).**
+  The new client's launch could reach a client that was already running (see "A new client can no
+  longer hand its launch to one already running" above), which then switched to the new account.
+  The lock is now cleared right before every launch, and the launch waits for a sweep that is still
+  running instead of going ahead after 2 seconds.
+- **The watchdog could put one account's name on another account's client.** A client that exited
+  within a minute was matched to whatever new client nobody had claimed yet, which could be another
+  account's launch still starting. It now looks only once no launch is in flight.
+- **Starting a launch no longer freezes the window for up to 2 seconds** while the single-instance
+  lock is cleared.
+- **Schedules fire on every regional format.** Where Windows writes times as `09.05` (Finnish and
+  others), schedules never ran and new schedules showed "Not scheduled".
+- **Presets and schedules launch the right account** when one account's alias is another account's
+  username; the stored username wins.
+- **One account's own FastFlags no longer stay in effect for every account launched after it.**
+  They are undone by the next launch, like the Ultra-low AFK profile's flags.
+- **A schedule keeps its target** when its account or preset disappears from the list, instead of
+  silently switching to "all clients". **Run now** on a Restart task only restarts every client when
+  no target is set, and a scheduled restart while the manager is locked no longer closes every client
+  it then can't relaunch.
+- **Double-click and the row menu act on the row you clicked.** With other accounts ticked, they used
+  to launch or remove the ticked accounts instead.
+- **Preset names stay unique**; schedules and the local API find presets by name.
+- Playtime history can no longer lose a session when two clients close at the same moment.
+- Removing many accounts at once saves the account file once instead of once per account (each save
+  re-encrypts the whole file, which froze the window with a master password).
+- "Restart clients that keep growing" reads `1,5` as one and a half, not 15.
+- **Hide usernames** also covers the server browser's account list.
+- The Overview stops refreshing its client list while another page is open.
+- With more than 16 per-account proxies, the manager no longer rebuilds its connections on almost
+  every request.
+- Settings → Local API lists `POST /preset`.
 
 ## v2.2.0 — 2026-10-07
 
