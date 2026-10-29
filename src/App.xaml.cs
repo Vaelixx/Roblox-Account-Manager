@@ -228,11 +228,11 @@ public partial class App : Application
         WatchdogService.Apply();
         AntiAfkService.Apply();
 
-        // Presets and schedules resolve a stored account by alias first, then username, so renaming
-        // the display name never breaks a saved preset or task.
+        // Presets and schedules store usernames: match those first, then an alias (older or hand-edited
+        // entries). One pass took whichever account came first when one's alias was another's username.
         Account? Resolve(string key) =>
-            vm.Store.Accounts.FirstOrDefault(a => string.Equals(a.Alias, key, StringComparison.OrdinalIgnoreCase))
-            ?? vm.Store.Accounts.FirstOrDefault(a => string.Equals(a.Username, key, StringComparison.OrdinalIgnoreCase));
+            vm.Store.Accounts.FirstOrDefault(a => string.Equals(a.Username, key, StringComparison.OrdinalIgnoreCase))
+            ?? vm.Store.Accounts.FirstOrDefault(a => string.Equals(a.Alias, key, StringComparison.OrdinalIgnoreCase));
         PresetService.Init(Resolve);
         SchedulerService.Init(Resolve);
         SchedulerService.Start();
